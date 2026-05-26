@@ -1,0 +1,75 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+_override.tf
+_override.tf.json
+.terraformrc
+terraform.rc
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Docker / Local Env
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Kind / Kubernetes / Local SSL
+kubeconfig.yaml
+kubeconfig
+*.pem
+*.key
+*.crt
+
+# App / Build Cache / AI Agents
+.agents/.cache/
+.gemini/
+.model/
+.agents/scratch/
+**/artifacts/
+
+# AI Agent Specific Configurations
+.agents/
+
+# Ignore all markdown files by default
+**/*.md
+
+# Exclude README.md files from being ignored
+!**/README.md
+
+# Ignore plans directory (only for local use)
+.plans/
