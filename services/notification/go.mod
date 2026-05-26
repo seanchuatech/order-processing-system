@@ -1,6 +1,6 @@
 module github.com/seanchuatech/order-processing-system/services/notification
 
-go 1.26.0
+go 1.24.0
 
 require (
 	github.com/klauspost/compress v1.15.9 // indirect
