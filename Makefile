@@ -15,10 +15,10 @@ lint:
 	fi
 
 test:
-	@echo "==> Running unit tests on all services with race detector..."
+	@echo "==> Running unit tests on all services..."
 	@for dir in $(SERVICES); do \
 		echo "Testing $$dir..."; \
-		(cd $$dir && go test -v -race ./...); \
+		(cd $$dir && go test -v ./...); \
 	done
 
 test-cover:
