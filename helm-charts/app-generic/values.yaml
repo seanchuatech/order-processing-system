@@ -1,10 +1,72 @@
+# Default values for app-generic.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
 replicaCount: 1
 
 image:
   repository: nginx
   pullPolicy: IfNotPresent
-  tag: "stable"
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+podAnnotations: {}
 
 service:
   type: ClusterIP
   port: 80
+
+# Environment variables injected directly
+env: {}
+
+# Use ConfigMap as source of environment variables
+envFromConfigMap: false
+configData: {}
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Ingress config - disabled by default
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# Horizontal Pod Autoscaling - disabled by default
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# External Secrets Operator configuration - disabled by default
+externalSecret:
+  enabled: false
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: "vault-backend"
+    kind: "ClusterSecretStore"
+  keys: []
+  data: []
