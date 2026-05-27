@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - order-service.yaml
   - notification-service.yaml
+  - cluster-secret-store.yaml
+  - external-services.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
