@@ -1,0 +1,75 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  gosec:
+    name: Go Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Run Gosec (order-service)
+        uses: securego/gosec@master
+        with:
+          args: ./services/order/...
+
+      - name: Run Gosec (notification-service)
+        uses: securego/gosec@master
+        with:
+          args: ./services/notification/...
+
+  trivy:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build order-service image
+        run: docker build -t order-service:local ./services/order
+
+      - name: Build notification-service image
+        run: docker build -t notification-service:local ./services/notification
+
+      - name: Run Trivy (order-service)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: 'order-service:local'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy (notification-service)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: 'notification-service:local'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  checkov:
+    name: IaC Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          soft_fail: false

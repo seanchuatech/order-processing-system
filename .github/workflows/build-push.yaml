@@ -1,0 +1,77 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_NAME_PREFIX: ghcr.io/${{ github.repository_owner }}/order-processing-system
+
+jobs:
+  build-push:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get short Git SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build and Push (order-service)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/order
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME_PREFIX }}/order-service:latest
+            ${{ env.IMAGE_NAME_PREFIX }}/order-service:${{ steps.vars.outputs.sha_short }}
+
+      - name: Build and Push (notification-service)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/notification
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME_PREFIX }}/notification-service:latest
+            ${{ env.IMAGE_NAME_PREFIX }}/notification-service:${{ steps.vars.outputs.sha_short }}
+
+      - name: Update tags in HelmRelease values
+        run: |
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/order-service-values.yaml
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/notification-service-values.yaml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update container image tags to ${{ steps.vars.outputs.sha_short }}"
+          title: "Update image tags to ${{ steps.vars.outputs.sha_short }}"
+          body: |
+            Automated image tag update to `${{ steps.vars.outputs.sha_short }}`.
+            
+            This PR updates the HelmRelease override values for `order-service` and `notification-service`.
+          branch: "update-image-tags-${{ steps.vars.outputs.sha_short }}"
+          base: main
