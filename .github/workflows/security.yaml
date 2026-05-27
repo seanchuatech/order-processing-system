@@ -41,7 +41,7 @@ jobs:
         run: docker build -t notification-service:local ./services/notification
 
       - name: Run Trivy (order-service)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'order-service:local'
           format: 'table'
@@ -51,7 +51,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Run Trivy (notification-service)
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'notification-service:local'
           format: 'table'
