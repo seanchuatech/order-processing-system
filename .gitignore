@@ -51,6 +51,8 @@ Thumbs.db
 # Kind / Kubernetes / Local SSL
 kubeconfig.yaml
 kubeconfig
+*config
+*config.yaml
 *.pem
 *.key
 *.crt

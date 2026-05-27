@@ -7,3 +7,87 @@ provider "helm" {
     config_path = "~/.kube/config"
   }
 }
+
+resource "helm_release" "ingress_nginx" {
+  name             = "ingress-nginx"
+  repository       = "https://kubernetes.github.io/ingress-nginx"
+  chart            = "ingress-nginx"
+  namespace        = "ingress-nginx"
+  create_namespace = true
+
+  set {
+    name  = "controller.hostPort.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "controller.nodeSelector.ingress-ready"
+    value = "true"
+    type  = "string"
+  }
+
+  set {
+    name  = "controller.tolerations[0].key"
+    value = "node-role.kubernetes.io/control-plane"
+  }
+
+  set {
+    name  = "controller.tolerations[0].operator"
+    value = "Exists"
+  }
+
+  set {
+    name  = "controller.tolerations[0].effect"
+    value = "NoSchedule"
+  }
+
+  set {
+    name  = "controller.tolerations[1].key"
+    value = "node-role.kubernetes.io/master"
+  }
+
+  set {
+    name  = "controller.tolerations[1].operator"
+    value = "Exists"
+  }
+
+  set {
+    name  = "controller.tolerations[1].effect"
+    value = "NoSchedule"
+  }
+
+  set {
+    name  = "controller.kind"
+    value = "DaemonSet"
+  }
+
+  set {
+    name  = "controller.service.type"
+    value = "ClusterIP"
+  }
+
+  wait = false
+}
+
+
+resource "helm_release" "external_secrets" {
+  name             = "external-secrets"
+  repository       = "https://charts.external-secrets.io"
+  chart            = "external-secrets"
+  namespace        = "external-secrets"
+  create_namespace = true
+
+  set {
+    name  = "installCRDs"
+    value = "true"
+  }
+}
+
+resource "helm_release" "flux2" {
+  name             = "flux2"
+  repository       = "https://fluxcd-community.github.io/helm-charts"
+  chart            = "flux2"
+  namespace        = "flux-system"
+  create_namespace = true
+}
+
