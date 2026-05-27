@@ -4,6 +4,9 @@ resources:
   - order-service.yaml
   - notification-service.yaml
 
+generatorOptions:
+  disableNameSuffixHash: true
+
 configMapGenerator:
   - name: order-service-values
     files:
