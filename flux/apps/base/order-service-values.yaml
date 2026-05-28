@@ -1,33 +1,27 @@
 replicaCount: 1
-
 image:
   repository: ghcr.io/seanchuatech/order-processing-system/order-service
-  tag: latest
+  tag: fe99a76
   pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 8090
-
 env:
   PORT: "8090"
   KAFKA_BROKERS: "kafka:29092"
   KAFKA_TOPIC: "orders.created"
-
 livenessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 resources:
   limits:
     cpu: 200m
@@ -35,7 +29,6 @@ resources:
   requests:
     cpu: 50m
     memory: 64Mi
-
 externalSecret:
   enabled: true
   secretStoreRef:
