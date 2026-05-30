@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,13 +16,34 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/handler"
+	"github.com/seanchuatech/order-processing-system/services/order/internal/metricshelper"
+	"github.com/seanchuatech/order-processing-system/services/order/internal/otelhelper"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/repository"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/service"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
-	log.Println("Starting Order Service...")
+	// Configure structured JSON logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting Order Service...")
+
+	// Initialize OpenTelemetry Tracer
+	ctx := context.Background()
+	tp, err := otelhelper.InitTracer(ctx, "order-service")
+	if err != nil {
+		slog.Error("Failed to initialize tracer", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := tp.Shutdown(ctx); err != nil {
+			slog.Error("Error shutting down tracer provider", "error", err)
+		}
+	}()
 
 	// 1. Load Configurations
 	port := os.Getenv("PORT")
@@ -41,33 +62,35 @@ func main() {
 
 	// 2. Connect to Database (with retry loop for docker-compose start sequence)
 	var db *sql.DB
-	var err error
 	for i := 1; i <= 10; i++ {
 		db, err = sql.Open("postgres", dbURL)
 		if err == nil {
 			err = db.Ping()
 		}
 		if err == nil {
-			log.Println("Successfully connected to the database")
+			slog.Info("Successfully connected to the database")
 			break
 		}
-		log.Printf("Failed to connect to database (attempt %d/10): %v. Retrying in 3s...", i, err)
+		slog.Warn("Failed to connect to database, retrying...", "attempt", i, "max_attempts", 10, "error", err)
 		time.Sleep(3 * time.Second)
 	}
 	if err != nil {
-		log.Fatalf("Could not connect to database after retries: %v", err)
+		slog.Error("Could not connect to database after retries", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	// 3. Run Database migrations/schema setup
 	if err := setupDatabaseSchema(db); err != nil {
-		log.Fatalf("Failed to set up database schema: %v", err)
+		slog.Error("Failed to set up database schema", "error", err)
+		os.Exit(1)
 	}
 
 	// 4. Initialize AWS SQS Client
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatalf("unable to load AWS SDK config: %v", err)
+		slog.Error("unable to load AWS SDK config", "error", err)
+		os.Exit(1)
 	}
 
 	var sqsClient *sqs.Client
@@ -84,7 +107,7 @@ func main() {
 	eventPublisher := repository.NewSQSEventPublisher(sqsClient, sqsQueueURL)
 	defer func() {
 		if err := eventPublisher.Close(); err != nil {
-			log.Printf("Error closing SQS event publisher: %v", err)
+			slog.Error("Error closing SQS event publisher", "error", err)
 		}
 	}()
 
@@ -94,16 +117,24 @@ func main() {
 	mux := http.NewServeMux()
 	orderHandler.RegisterRoutes(mux)
 
+	// Register Prometheus metrics endpoint
+	mux.Handle("GET /metrics", promhttp.Handler())
+
+	// Wrap handler in OpenTelemetry HTTP instrumentation middleware and metrics middleware
+	otelHandler := otelhttp.NewHandler(mux, "order-service")
+	metricsHandler := metricshelper.MetricsMiddleware(otelHandler)
+
 	// 5. Start Server
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: metricsHandler,
 	}
 
 	go func() {
-		log.Printf("Order service server listening on port %s", port)
+		slog.Info("Order service server listening", "port", port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server failed: %v", err)
+			slog.Error("HTTP server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -112,14 +143,14 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Shutting down gracefully...")
+	slog.Info("Shutting down gracefully...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		slog.Error("HTTP server shutdown error", "error", err)
 	}
-	log.Println("Order Service stopped.")
+	slog.Info("Order Service stopped.")
 }
 
 func setupDatabaseSchema(db *sql.DB) error {

@@ -3,12 +3,16 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/seanchuatech/order-processing-system/services/notification/internal/domain"
+	"github.com/seanchuatech/order-processing-system/services/notification/internal/metricshelper"
+	"github.com/seanchuatech/order-processing-system/services/notification/internal/otelhelper"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type SQSConsumer struct {
@@ -24,7 +28,7 @@ func NewSQSConsumer(client *sqs.Client, queueURL string) *SQSConsumer {
 }
 
 func (c *SQSConsumer) Start(ctx context.Context) error {
-	log.Println("Notification service SQS consumer starting...")
+	slog.Info("Notification service SQS consumer starting...")
 	for {
 		select {
 		case <-ctx.Done():
@@ -32,39 +36,65 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 		default:
 			// Poll SQS (Long Polling)
 			result, err := c.client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-				QueueUrl:            aws.String(c.queueURL),
-				MaxNumberOfMessages: 10,
-				WaitTimeSeconds:     10, // Long polling
+				QueueUrl:              aws.String(c.queueURL),
+				MaxNumberOfMessages:   10,
+				WaitTimeSeconds:       10, // Long polling
+				MessageAttributeNames: []string{"All"},
 			})
 			if err != nil {
 				select {
 				case <-ctx.Done():
 					return nil
 				default:
-					log.Printf("Error receiving messages from SQS: %v", err)
+					slog.Error("Error receiving messages from SQS", "error", err)
 					time.Sleep(2 * time.Second)
 					continue
 				}
 			}
 
 			for _, msg := range result.Messages {
+				start := time.Now()
+				status := "success"
+
+				// Extract tracing context from message attributes
+				carrier := otelhelper.SQSCarrier(msg.MessageAttributes)
+				parentCtx := otel.GetTextMapPropagator().Extract(ctx, carrier)
+
+				tr := otel.Tracer("notification-service")
+				msgCtx, span := tr.Start(parentCtx, "ProcessNotification", trace.WithSpanKind(trace.SpanKindConsumer))
+
 				event, err := parseMessageBody(*msg.Body)
 				if err != nil {
-					log.Printf("Error parsing message body: %v", err)
+					status = "error"
+					slog.Error("Error parsing message body", "error", err)
+					span.RecordError(err)
+					span.End()
+					metricshelper.SQSConsumeTotal.WithLabelValues(c.queueURL, status).Inc()
+					metricshelper.SQSConsumeDuration.WithLabelValues(c.queueURL, status).Observe(time.Since(start).Seconds())
 					continue
 				}
 
-				log.Printf("[Notification Service] SUCCESS: Notification dispatched for Order ID: %s | Customer ID: %s | Status: %s | Total: $%.2f",
-					event.OrderID, event.CustomerID, event.Status, event.Amount)
+				slog.Info("Notification dispatched",
+					"order_id", event.OrderID,
+					"customer_id", event.CustomerID,
+					"status", event.Status,
+					"amount", event.Amount,
+				)
 
 				// Delete message after successful processing
-				_, err = c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+				_, err = c.client.DeleteMessage(msgCtx, &sqs.DeleteMessageInput{
 					QueueUrl:      aws.String(c.queueURL),
 					ReceiptHandle: msg.ReceiptHandle,
 				})
 				if err != nil {
-					log.Printf("Error deleting message from SQS: %v", err)
+					status = "error"
+					slog.Error("Error deleting message from SQS", "error", err)
+					span.RecordError(err)
 				}
+				span.End()
+
+				metricshelper.SQSConsumeTotal.WithLabelValues(c.queueURL, status).Inc()
+				metricshelper.SQSConsumeDuration.WithLabelValues(c.queueURL, status).Observe(time.Since(start).Seconds())
 			}
 		}
 	}

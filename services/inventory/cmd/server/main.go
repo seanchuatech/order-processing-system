@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,12 +16,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/seanchuatech/order-processing-system/services/inventory/internal/consumer"
+	"github.com/seanchuatech/order-processing-system/services/inventory/internal/otelhelper"
 	"github.com/seanchuatech/order-processing-system/services/inventory/internal/repository"
 )
 
 func main() {
-	log.Println("Starting Inventory Service...")
+	// Configure structured JSON logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting Inventory Service...")
+
+	// Initialize OpenTelemetry Tracer
+	ctx := context.Background()
+	tp, err := otelhelper.InitTracer(ctx, "inventory-service")
+	if err != nil {
+		slog.Error("Failed to initialize tracer", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := tp.Shutdown(ctx); err != nil {
+			slog.Error("Error shutting down tracer provider", "error", err)
+		}
+	}()
 
 	// 1. Load Configurations
 	port := os.Getenv("PORT")
@@ -40,7 +59,6 @@ func main() {
 
 	// 2. Connect to Database (with retry loop)
 	var db *sql.DB
-	var err error
 	for i := 1; i <= 10; i++ {
 		db, err = sql.Open("postgres", dbURL)
 		if err == nil {
@@ -49,24 +67,27 @@ func main() {
 		if err == nil {
 			break
 		}
-		log.Printf("Failed to connect to database (attempt %d/10): %v. Retrying in 3s...", i, err)
+		slog.Warn("Failed to connect to database, retrying...", "attempt", i, "max_attempts", 10, "error", err)
 		time.Sleep(3 * time.Second)
 	}
 	if err != nil {
-		log.Fatalf("unable to connect to database: %v", err)
+		slog.Error("unable to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
-	log.Println("Connected to database successfully.")
+	slog.Info("Connected to database successfully.")
 
 	// 3. Database Schema Initialization & Seeding
 	if err := initSchemaAndSeed(db); err != nil {
-		log.Fatalf("failed to initialize schema and seed data: %v", err)
+		slog.Error("failed to initialize schema and seed data", "error", err)
+		os.Exit(1)
 	}
 
 	// 4. Initialize AWS SQS Client
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatalf("unable to load AWS SDK config: %v", err)
+		slog.Error("unable to load AWS SDK config", "error", err)
+		os.Exit(1)
 	}
 
 	var sqsClient *sqs.Client
@@ -83,17 +104,18 @@ func main() {
 	sqsConsumer := consumer.NewSQSConsumer(sqsClient, sqsQueueURL, repo)
 	defer func() {
 		if err := sqsConsumer.Close(); err != nil {
-			log.Printf("Error closing SQS consumer: %v", err)
+			slog.Error("Error closing SQS consumer", "error", err)
 		}
 	}()
 
-	// 6. Set Up Health Check Server
+	// 6. Set Up Health Check & Metrics Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	})
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -101,19 +123,19 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Health server listening on port %s", port)
+		slog.Info("Health server listening", "port", port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Health server error: %v", err)
+			slog.Error("Health server error", "error", err)
 		}
 	}()
 
 	// 7. Start SQS Consumer Loop
-	ctx, cancel := context.WithCancel(context.Background())
+	consumerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go func() {
-		if err := sqsConsumer.Start(ctx); err != nil {
-			log.Printf("SQS consumer stopped: %v", err)
+		if err := sqsConsumer.Start(consumerCtx); err != nil {
+			slog.Error("SQS consumer stopped", "error", err)
 		}
 	}()
 
@@ -122,17 +144,17 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Shutting down Inventory Service gracefully...")
+	slog.Info("Shutting down Inventory Service gracefully...")
 	cancel() // Stop consumer
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		slog.Error("Server shutdown error", "error", err)
 	}
 
-	log.Println("Inventory Service stopped.")
+	slog.Info("Inventory Service stopped.")
 }
 
 func initSchemaAndSeed(db *sql.DB) error {
@@ -148,7 +170,7 @@ func initSchemaAndSeed(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to create inventory table: %w", err)
 	}
-	log.Println("Database schema check: 'inventory' table is ready.")
+	slog.Info("Database schema check: 'inventory' table is ready.")
 
 	// Seed some default inventory products if table is empty
 	var count int
@@ -158,7 +180,7 @@ func initSchemaAndSeed(db *sql.DB) error {
 	}
 
 	if count == 0 {
-		log.Println("Inventory table is empty. Seeding initial products...")
+		slog.Info("Inventory table is empty. Seeding initial products...")
 		seedProducts := map[string]int{
 			"item-abc": 100,
 			"item-xyz": 100,
@@ -169,7 +191,7 @@ func initSchemaAndSeed(db *sql.DB) error {
 				return fmt.Errorf("failed to seed product %s: %w", pid, err)
 			}
 		}
-		log.Println("Seeded default inventory successfully.")
+		slog.Info("Seeded default inventory successfully.")
 	}
 
 	return nil

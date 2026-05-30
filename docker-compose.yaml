@@ -25,6 +25,42 @@ services:
       timeout: 5s
       retries: 5
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: jaeger
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - order-service
+      - notification-service
+      - payment-service
+      - inventory-service
+      - analytics-service
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - jaeger
+
   order-service:
     build:
       context: ./services/order
@@ -40,10 +76,13 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
       elasticmq:
+        condition: service_started
+      jaeger:
         condition: service_started
 
   notification-service:
@@ -60,8 +99,11 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       elasticmq:
+        condition: service_started
+      jaeger:
         condition: service_started
 
   payment-service:
@@ -82,8 +124,11 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       elasticmq:
+        condition: service_started
+      jaeger:
         condition: service_started
 
   inventory-service:
@@ -101,10 +146,13 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
       elasticmq:
+        condition: service_started
+      jaeger:
         condition: service_started
 
   analytics-service:
@@ -121,6 +169,9 @@ services:
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
       elasticmq:
+        condition: service_started
+      jaeger:
         condition: service_started

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 type PostgresInventoryRepository struct {
@@ -27,7 +27,7 @@ func (r *PostgresInventoryRepository) DeductStock(ctx context.Context, productID
 	err = tx.QueryRowContext(ctx, "SELECT quantity FROM inventory WHERE product_id = $1 FOR UPDATE", productID).Scan(&currentQty)
 	if err == sql.ErrNoRows {
 		// Create item if not exists with a default stock of 100 first, then deduct
-		log.Printf("[Inventory Repository] Product ID %s not found in stock. Initializing with default 100 items.", productID)
+		slog.Info("Product not found in stock, initializing with default 100 items", "product_id", productID)
 		_, err = tx.ExecContext(ctx, "INSERT INTO inventory (product_id, quantity) VALUES ($1, $2)", productID, 100)
 		if err != nil {
 			return fmt.Errorf("failed to initialize stock for %s: %w", productID, err)
@@ -38,7 +38,7 @@ func (r *PostgresInventoryRepository) DeductStock(ctx context.Context, productID
 	}
 
 	if currentQty < quantity {
-		log.Printf("[Inventory Repository] WARNING: Insufficient stock for %s. Current: %d, Requested: %d. Deducting to 0.", productID, currentQty, quantity)
+		slog.Warn("Insufficient stock. Deducting to 0", "product_id", productID, "current", currentQty, "requested", quantity)
 		_, err = tx.ExecContext(ctx, "UPDATE inventory SET quantity = 0 WHERE product_id = $1", productID)
 	} else {
 		_, err = tx.ExecContext(ctx, "UPDATE inventory SET quantity = quantity - $1 WHERE product_id = $2", quantity, productID)
@@ -52,6 +52,6 @@ func (r *PostgresInventoryRepository) DeductStock(ctx context.Context, productID
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Printf("[Inventory Repository] Stock successfully deducted for %s by %d", productID, quantity)
+	slog.Info("Stock successfully deducted", "product_id", productID, "deducted_quantity", quantity)
 	return nil
 }

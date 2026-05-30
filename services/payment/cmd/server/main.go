@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,12 +14,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/seanchuatech/order-processing-system/services/payment/internal/consumer"
+	"github.com/seanchuatech/order-processing-system/services/payment/internal/otelhelper"
 	"github.com/seanchuatech/order-processing-system/services/payment/internal/repository"
 )
 
 func main() {
-	log.Println("Starting Payment Service...")
+	// Configure structured JSON logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting Payment Service...")
+
+	// Initialize OpenTelemetry Tracer
+	ctx := context.Background()
+	tp, err := otelhelper.InitTracer(ctx, "payment-service")
+	if err != nil {
+		slog.Error("Failed to initialize tracer", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := tp.Shutdown(ctx); err != nil {
+			slog.Error("Error shutting down tracer provider", "error", err)
+		}
+	}()
 
 	// 1. Load Configurations
 	port := os.Getenv("PORT")
@@ -37,7 +56,8 @@ func main() {
 	// 2. Initialize AWS Config
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatalf("unable to load AWS SDK config: %v", err)
+		slog.Error("unable to load AWS SDK config", "error", err)
+		os.Exit(1)
 	}
 
 	var sqsClient *sqs.Client
@@ -52,7 +72,7 @@ func main() {
 	// 3. Initialize Event Publisher based on Local/Prod Mode
 	var publisher repository.EventPublisher
 	if localMode {
-		log.Println("Initializing Payment Service in LOCAL DIRECT SQS mode...")
+		slog.Info("Initializing Payment Service in LOCAL DIRECT SQS mode...")
 		notifURL := os.Getenv("SQS_NOTIFICATION_QUEUE_URL")
 		if notifURL == "" {
 			notifURL = "http://localhost:9324/000000000000/payment-processed-notification"
@@ -68,9 +88,10 @@ func main() {
 
 		publisher = repository.NewSQSEventPublisher(sqsClient, []string{notifURL, invURL, analyticsURL})
 	} else {
-		log.Println("Initializing Payment Service in SNS FANOUT mode...")
+		slog.Info("Initializing Payment Service in SNS FANOUT mode...")
 		if snsTopicARN == "" {
-			log.Fatal("SNS_TOPIC_ARN must be set when LOCAL_MODE is false")
+			slog.Error("SNS_TOPIC_ARN must be set when LOCAL_MODE is false")
+			os.Exit(1)
 		}
 		var snsClient *sns.Client
 		if sqsEndpoint != "" { // local emulation if needed, but normally not used
@@ -87,17 +108,18 @@ func main() {
 	sqsConsumer := consumer.NewSQSConsumer(sqsClient, sqsQueueURL, publisher)
 	defer func() {
 		if err := sqsConsumer.Close(); err != nil {
-			log.Printf("Error closing SQS consumer: %v", err)
+			slog.Error("Error closing SQS consumer", "error", err)
 		}
 	}()
 
-	// 5. Health Check Endpoint
+	// 5. Health Check & Metrics Endpoint
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	})
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -105,19 +127,19 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Health server listening on port %s", port)
+		slog.Info("Health server listening", "port", port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("Health server error: %v", err)
+			slog.Error("Health server error", "error", err)
 		}
 	}()
 
 	// 6. Start Consumer Loop in background
-	ctx, cancel := context.WithCancel(context.Background())
+	consumerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go func() {
-		if err := sqsConsumer.Start(ctx); err != nil {
-			log.Printf("SQS consumer stopped: %v", err)
+		if err := sqsConsumer.Start(consumerCtx); err != nil {
+			slog.Error("SQS consumer stopped", "error", err)
 		}
 	}()
 
@@ -126,15 +148,15 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Shutting down Payment Service gracefully...")
+	slog.Info("Shutting down Payment Service gracefully...")
 	cancel() // Stop consumer
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		slog.Error("Server shutdown error", "error", err)
 	}
 
-	log.Println("Payment Service stopped.")
+	slog.Info("Payment Service stopped.")
 }
