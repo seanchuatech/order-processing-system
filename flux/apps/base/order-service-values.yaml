@@ -11,8 +11,13 @@ service:
 
 env:
   PORT: "8090"
-  KAFKA_BROKERS: "kafka:9092"
-  KAFKA_TOPIC: "orders.created"
+  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/728399088474/ops-sandbox-orders-created"
+
+serviceAccount:
+  create: true
+  name: "order-service"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-order-service-role"
 
 livenessProbe:
   httpGet:

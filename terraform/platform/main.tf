@@ -155,36 +155,22 @@ resource "aws_db_instance" "postgres" {
 }
 
 # ==========================================
-# 2. Apache Kafka (Self-Hosted in EKS)
+# 2. AWS SQS Queues
 # ==========================================
 
-resource "helm_release" "kafka" {
-  name             = "kafka"
-  repository       = "https://charts.bitnami.com/bitnami"
-  chart            = "kafka"
-  version          = "29.3.7"
-  namespace        = "default"
-  create_namespace = false
+resource "aws_sqs_queue" "orders_created_dlq" {
+  name                      = "ops-sandbox-orders-created-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  kms_master_key_id         = "alias/aws/sqs"
+}
 
-  set {
-    name  = "broker.replicaCount"
-    value = "1"
-  }
-
-  set {
-    name  = "controller.replicaCount"
-    value = "1"
-  }
-
-  set {
-    name  = "persistence.enabled"
-    value = "false"
-  }
-
-  set {
-    name  = "listeners.client.protocol"
-    value = "PLAINTEXT"
-  }
+resource "aws_sqs_queue" "orders_created" {
+  name                      = "ops-sandbox-orders-created"
+  kms_master_key_id         = "alias/aws/sqs"
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.orders_created_dlq.arn
+    maxReceiveCount     = 3
+  })
 }
 
 # ==========================================
@@ -284,6 +270,100 @@ resource "aws_iam_role_policy_attachment" "eso" {
 }
 
 # ==========================================
+# 4a. Order Service & Notification Service IRSA Roles
+# ==========================================
+
+# Order Service IRSA Role
+data "aws_iam_policy_document" "order_service_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:default:order-service"]
+    }
+
+    principals {
+      identifiers = [data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn]
+      type        = "Federated"
+    }
+  }
+}
+
+resource "aws_iam_role" "order_service" {
+  name               = "ops-sandbox-order-service-role"
+  assume_role_policy = data.aws_iam_policy_document.order_service_assume_role.json
+}
+
+data "aws_iam_policy_document" "order_service_sqs_access" {
+  statement {
+    actions   = ["sqs:SendMessage"]
+    effect    = "Allow"
+    resources = [aws_sqs_queue.orders_created.arn]
+  }
+}
+
+resource "aws_iam_policy" "order_service" {
+  name        = "ops-sandbox-order-service-policy"
+  description = "Allow order-service to publish SQS messages"
+  policy      = data.aws_iam_policy_document.order_service_sqs_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "order_service" {
+  role       = aws_iam_role.order_service.name
+  policy_arn = aws_iam_policy.order_service.arn
+}
+
+# Notification Service IRSA Role
+data "aws_iam_policy_document" "notification_service_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:default:notification-service"]
+    }
+
+    principals {
+      identifiers = [data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn]
+      type        = "Federated"
+    }
+  }
+}
+
+resource "aws_iam_role" "notification_service" {
+  name               = "ops-sandbox-notification-service-role"
+  assume_role_policy = data.aws_iam_policy_document.notification_service_assume_role.json
+}
+
+data "aws_iam_policy_document" "notification_service_sqs_access" {
+  statement {
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes"
+    ]
+    effect    = "Allow"
+    resources = [aws_sqs_queue.orders_created.arn]
+  }
+}
+
+resource "aws_iam_policy" "notification_service" {
+  name        = "ops-sandbox-notification-service-policy"
+  description = "Allow notification-service to consume SQS messages"
+  policy      = data.aws_iam_policy_document.notification_service_sqs_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "notification_service" {
+  role       = aws_iam_role.notification_service.name
+  policy_arn = aws_iam_policy.notification_service.arn
+}
+
+# ==========================================
 # 5. Helm Operator Deployments
 # ==========================================
 
@@ -311,6 +391,11 @@ resource "helm_release" "flux2" {
   chart            = "flux2"
   namespace        = "flux-system"
   create_namespace = true
+
+  set {
+    name  = "cli.tag"
+    value = "v2.4.0"
+  }
 }
 
 # ==========================================
@@ -327,16 +412,11 @@ module "karpenter" {
   enable_irsa                     = true
   irsa_oidc_provider_arn          = data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn
   irsa_namespace_service_accounts = ["karpenter:karpenter"]
+  create_access_entry             = true
 
   node_iam_role_additional_policies = {
     AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   }
-}
-
-resource "aws_eks_access_entry" "karpenter_nodes" {
-  cluster_name  = data.terraform_remote_state.bootstrap.outputs.cluster_name
-  principal_arn = module.karpenter.node_iam_role_arn
-  type          = "EC2_LINUX"
 }
 
 resource "helm_release" "karpenter" {
@@ -382,6 +462,11 @@ resource "kubernetes_manifest" "karpenter_node_class" {
     }
     spec = {
       amiFamily = "AL2023"
+      amiSelectorTerms = [
+        {
+          alias = "al2023@latest"
+        }
+      ]
       role      = module.karpenter.node_iam_role_name
       subnetSelectorTerms = [
         {

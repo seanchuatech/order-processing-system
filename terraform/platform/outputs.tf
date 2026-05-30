@@ -3,9 +3,14 @@ output "rds_endpoint" {
   value       = aws_db_instance.postgres.endpoint
 }
 
-output "kafka_endpoint" {
-  description = "The self-hosted Kafka service endpoint inside EKS"
-  value       = "kafka.default.svc.cluster.local:9092"
+output "sqs_queue_url" {
+  description = "URL of the provisioned AWS SQS queue"
+  value       = aws_sqs_queue.orders_created.id
+}
+
+output "sqs_queue_arn" {
+  description = "ARN of the provisioned AWS SQS queue"
+  value       = aws_sqs_queue.orders_created.arn
 }
 
 output "eso_iam_role_arn" {

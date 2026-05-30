@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/seanchuatech/order-processing-system/services/notification/internal/consumer"
 )
 
@@ -22,29 +24,36 @@ func main() {
 	if port == "" {
 		port = "8081" // Different port to avoid conflict with order-service
 	}
-	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
+	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
+	if sqsQueueURL == "" {
+		sqsQueueURL = "http://localhost:9324/000000000000/orders-created"
 	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
-	kafkaTopic := os.Getenv("KAFKA_TOPIC")
-	if kafkaTopic == "" {
-		kafkaTopic = "orders.created"
-	}
-	kafkaGroupID := os.Getenv("KAFKA_GROUP_ID")
-	if kafkaGroupID == "" {
-		kafkaGroupID = "notification-group"
+	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
+
+	// 2. Initialize AWS SQS Client
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("unable to load AWS SDK config: %v", err)
 	}
 
-	// 2. Initialize Components
-	kafkaConsumer := consumer.NewKafkaConsumer(kafkaBrokers, kafkaTopic, kafkaGroupID)
+	var sqsClient *sqs.Client
+	if sqsEndpoint != "" {
+		sqsClient = sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+			o.BaseEndpoint = aws.String(sqsEndpoint)
+		})
+	} else {
+		sqsClient = sqs.NewFromConfig(cfg)
+	}
+
+	// 3. Initialize Components
+	sqsConsumer := consumer.NewSQSConsumer(sqsClient, sqsQueueURL)
 	defer func() {
-		if err := kafkaConsumer.Close(); err != nil {
-			log.Printf("Error closing Kafka consumer: %v", err)
+		if err := sqsConsumer.Close(); err != nil {
+			log.Printf("Error closing SQS consumer: %v", err)
 		}
 	}()
 
-	// 3. Set Up Health Check Server
+	// 4. Set Up Health Check Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -65,23 +74,23 @@ func main() {
 		}
 	}()
 
-	// 4. Start Kafka Consumer Loop in background
+	// 5. Start SQS Consumer Loop in background
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go func() {
-		if err := kafkaConsumer.Start(ctx); err != nil {
-			log.Printf("Kafka consumer stopped with error: %v", err)
+		if err := sqsConsumer.Start(ctx); err != nil {
+			log.Printf("SQS consumer stopped with error: %v", err)
 		}
 	}()
 
-	// 5. Graceful Shutdown
+	// 6. Graceful Shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
 	log.Println("Shutting down gracefully...")
-	cancel() // Stop the Kafka consumer loop
+	cancel() // Stop the SQS consumer loop
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()

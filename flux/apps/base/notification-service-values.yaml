@@ -11,9 +11,13 @@ service:
 
 env:
   PORT: "8081"
-  KAFKA_BROKERS: "kafka:9092"
-  KAFKA_TOPIC: "orders.created"
-  KAFKA_GROUP_ID: "notification-group"
+  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/728399088474/ops-sandbox-orders-created"
+
+serviceAccount:
+  create: true
+  name: "notification-service"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-notification-service-role"
 
 livenessProbe:
   httpGet:

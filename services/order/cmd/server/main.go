@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	_ "github.com/lib/pq"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/handler"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/repository"
@@ -31,15 +33,11 @@ func main() {
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/order_db?sslmode=disable"
 	}
-	kafkaBrokersStr := os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokersStr == "" {
-		kafkaBrokersStr = "localhost:9092"
+	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
+	if sqsQueueURL == "" {
+		sqsQueueURL = "http://localhost:9324/000000000000/orders-created"
 	}
-	kafkaBrokers := strings.Split(kafkaBrokersStr, ",")
-	kafkaTopic := os.Getenv("KAFKA_TOPIC")
-	if kafkaTopic == "" {
-		kafkaTopic = "orders.created"
-	}
+	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 
 	// 2. Connect to Database (with retry loop for docker-compose start sequence)
 	var db *sql.DB
@@ -66,12 +64,27 @@ func main() {
 		log.Fatalf("Failed to set up database schema: %v", err)
 	}
 
-	// 4. Initialize Components
+	// 4. Initialize AWS SQS Client
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("unable to load AWS SDK config: %v", err)
+	}
+
+	var sqsClient *sqs.Client
+	if sqsEndpoint != "" {
+		sqsClient = sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+			o.BaseEndpoint = aws.String(sqsEndpoint)
+		})
+	} else {
+		sqsClient = sqs.NewFromConfig(cfg)
+	}
+
+	// 5. Initialize Components
 	orderRepo := repository.NewPostgresOrderRepository(db)
-	eventPublisher := repository.NewKafkaEventPublisher(kafkaBrokers, kafkaTopic)
+	eventPublisher := repository.NewSQSEventPublisher(sqsClient, sqsQueueURL)
 	defer func() {
 		if err := eventPublisher.Close(); err != nil {
-			log.Printf("Error closing Kafka event publisher: %v", err)
+			log.Printf("Error closing SQS event publisher: %v", err)
 		}
 	}()
 

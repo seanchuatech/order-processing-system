@@ -70,3 +70,8 @@ externalSecret:
     kind: "ClusterSecretStore"
   keys: []
   data: []
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""

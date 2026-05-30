@@ -21,6 +21,7 @@ spec:
       labels:
         {{- include "app-generic.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "app-generic.serviceAccountName" . }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
