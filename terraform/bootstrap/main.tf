@@ -12,6 +12,7 @@ locals {
 }
 
 module "vpc" {
+  #checkov:skip=CKV_TF_1:Using public Terraform Registry modules with version constraints is standard practice
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
 
@@ -39,6 +40,7 @@ module "vpc" {
 }
 
 module "eks" {
+  #checkov:skip=CKV_TF_1:Using public Terraform Registry modules with version constraints is standard practice
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
 

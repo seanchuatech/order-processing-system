@@ -52,13 +52,7 @@ resource "aws_security_group" "rds" {
     security_groups = [data.terraform_remote_state.bootstrap.outputs.node_security_group_id]
   }
 
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
-  }
+  # Egress block removed (fixing CKV_AWS_382) because the database does not need to initiate outbound internet connections.
 
   tags = {
     Name = "ops-sandbox-rds-sg"
@@ -80,20 +74,28 @@ resource "random_password" "db_password" {
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
+# tfsec:ignore:aws-rds-enable-initial-db-password-rotation
 resource "aws_db_instance" "postgres" {
-  identifier           = "ops-sandbox-db"
-  allocated_storage    = 20
-  storage_type         = "gp2"
-  engine               = "postgres"
-  engine_version       = "16.4"
-  instance_class       = "db.t3.micro"
-  db_name              = "orders"
-  username             = "postgres"
-  password             = random_password.db_password.result
-  db_subnet_group_name = aws_db_subnet_group.rds.name
+  #checkov:skip=CKV_AWS_157:Multi-AZ disabled for sandbox environment cost savings
+  #checkov:skip=CKV_AWS_293:Deletion protection disabled to allow smooth sandbox terraform teardowns
+  identifier             = "ops-sandbox-db"
+  allocated_storage      = 20
+  storage_type           = "gp2"
+  engine                 = "postgres"
+  engine_version         = "16.4"
+  instance_class         = "db.t3.micro"
+  db_name                = "orders"
+  username               = "postgres"
+  password               = random_password.db_password.result
+  db_subnet_group_name   = aws_db_subnet_group.rds.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  skip_final_snapshot  = true
-  multi_az             = false
+  skip_final_snapshot    = true
+  multi_az               = false
+
+  storage_encrypted                   = true
+  iam_database_authentication_enabled = true
+  enabled_cloudwatch_logs_exports     = ["postgresql", "upgrade"]
+  auto_minor_version_upgrade          = true
 
   tags = {
     Name = "ops-sandbox-db"
@@ -233,6 +235,7 @@ resource "helm_release" "flux2" {
 # ==========================================
 
 module "karpenter" {
+  #checkov:skip=CKV_TF_1:Using public Terraform Registry modules with version constraints is standard practice
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
   version = "~> 20.0"
 
