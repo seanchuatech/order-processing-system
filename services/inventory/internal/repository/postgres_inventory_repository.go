@@ -20,7 +20,7 @@ func (r *PostgresInventoryRepository) DeductStock(ctx context.Context, productID
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Check current stock first
 	var currentQty int
