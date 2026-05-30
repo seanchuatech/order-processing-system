@@ -114,8 +114,7 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 
 resource "random_password" "db_password" {
   length           = 16
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  special          = false
 }
 
 # tfsec:ignore:aws-rds-enable-initial-db-password-rotation
@@ -211,7 +210,7 @@ resource "aws_ssm_parameter" "db_url" {
   name        = "/ops-sandbox/order-service/DATABASE_URL"
   description = "Database URL for the order service"
   type        = "SecureString"
-  value       = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/orders?sslmode=disable"
+  value       = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/orders?sslmode=require"
   key_id      = aws_kms_key.ssm.arn
 }
 
