@@ -28,7 +28,7 @@ metadata:
 spec:
   ports:
     - protocol: TCP
-      port: 29092
+      port: 9092
       targetPort: 29092
 ---
 apiVersion: v1

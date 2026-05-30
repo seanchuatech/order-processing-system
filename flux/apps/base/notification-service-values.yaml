@@ -11,7 +11,7 @@ service:
 
 env:
   PORT: "8081"
-  KAFKA_BROKERS: "kafka:29092"
+  KAFKA_BROKERS: "kafka:9092"
   KAFKA_TOPIC: "orders.created"
   KAFKA_GROUP_ID: "notification-group"
 

@@ -11,7 +11,7 @@ service:
 
 env:
   PORT: "8090"
-  KAFKA_BROKERS: "kafka:29092"
+  KAFKA_BROKERS: "kafka:9092"
   KAFKA_TOPIC: "orders.created"
 
 livenessProbe:
@@ -46,5 +46,4 @@ externalSecret:
   data:
     - secretKey: DATABASE_URL
       remoteRef:
-        key: order-service-secrets
-        property: DATABASE_URL
+        key: /ops-sandbox/order-service/DATABASE_URL

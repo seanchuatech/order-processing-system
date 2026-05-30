@@ -101,62 +101,35 @@ resource "aws_db_instance" "postgres" {
 }
 
 # ==========================================
-# 2. Apache Kafka (AWS MSK)
+# 2. Apache Kafka (Self-Hosted in EKS)
 # ==========================================
 
-resource "aws_security_group" "msk" {
-  name        = "ops-sandbox-msk-sg"
-  description = "Allow EKS nodes to connect to MSK Kafka"
-  vpc_id      = data.terraform_remote_state.bootstrap.outputs.vpc_id
+resource "helm_release" "kafka" {
+  name             = "kafka"
+  repository       = "https://charts.bitnami.com/bitnami"
+  chart            = "kafka"
+  version          = "29.3.7"
+  namespace        = "default"
+  create_namespace = false
 
-  ingress {
-    description     = "Kafka plaintext from EKS nodes"
-    from_port       = 9092
-    to_port         = 9092
-    protocol        = "tcp"
-    security_groups = [data.terraform_remote_state.bootstrap.outputs.node_security_group_id]
+  set {
+    name  = "broker.replicaCount"
+    value = "1"
   }
 
-  ingress {
-    description     = "Kafka TLS from EKS nodes"
-    from_port       = 9094
-    to_port         = 9094
-    protocol        = "tcp"
-    security_groups = [data.terraform_remote_state.bootstrap.outputs.node_security_group_id]
+  set {
+    name  = "controller.replicaCount"
+    value = "1"
   }
 
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+  set {
+    name  = "persistence.enabled"
+    value = "false"
   }
 
-  tags = {
-    Name = "ops-sandbox-msk-sg"
-  }
-}
-
-resource "aws_msk_cluster" "kafka" {
-  cluster_name           = "ops-sandbox-kafka"
-  kafka_version          = "3.2.0"
-  number_of_broker_nodes = 2
-
-  broker_node_group_info {
-    instance_type = "kafka.t3.small"
-    client_subnets = slice(data.terraform_remote_state.bootstrap.outputs.private_subnets, 0, 2)
-    security_groups = [aws_security_group.msk.id]
-  }
-
-  encryption_info {
-    encryption_in_transit {
-      client_broker = "TLS_PLAINTEXT"
-    }
-  }
-
-  tags = {
-    Name = "ops-sandbox-kafka"
+  set {
+    name  = "listeners.client.protocol"
+    value = "PLAINTEXT"
   }
 }
 
@@ -240,6 +213,11 @@ resource "helm_release" "external_secrets" {
     name  = "installCRDs"
     value = "true"
   }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.eso.arn
+  }
 }
 
 resource "helm_release" "flux2" {
@@ -304,3 +282,90 @@ resource "helm_release" "karpenter" {
     value = module.karpenter.queue_name
   }
 }
+
+# ==========================================
+# 7. Karpenter Provisioner Configs
+# ==========================================
+
+resource "kubernetes_manifest" "karpenter_node_class" {
+  manifest = {
+    apiVersion = "karpenter.k8s.aws/v1"
+    kind       = "EC2NodeClass"
+    metadata = {
+      name = "default"
+    }
+    spec = {
+      amiFamily = "AL2023"
+      role      = module.karpenter.node_iam_role_name
+      subnetSelectorTerms = [
+        {
+          tags = {
+            "karpenter.sh/discovery" = data.terraform_remote_state.bootstrap.outputs.cluster_name
+          }
+        }
+      ]
+      securityGroupSelectorTerms = [
+        {
+          tags = {
+            "karpenter.sh/discovery" = data.terraform_remote_state.bootstrap.outputs.cluster_name
+          }
+        }
+      ]
+    }
+  }
+
+  depends_on = [helm_release.karpenter]
+}
+
+resource "kubernetes_manifest" "karpenter_node_pool" {
+  manifest = {
+    apiVersion = "karpenter.sh/v1"
+    kind       = "NodePool"
+    metadata = {
+      name = "default"
+    }
+    spec = {
+      template = {
+        spec = {
+          requirements = [
+            {
+              key      = "kubernetes.io/arch"
+              operator = "In"
+              values   = ["amd64"]
+            },
+            {
+              key      = "kubernetes.io/os"
+              operator = "In"
+              values   = ["linux"]
+            },
+            {
+              key      = "karpenter.sh/capacity-type"
+              operator = "In"
+              values   = ["on-demand"]
+            },
+            {
+              key      = "node.kubernetes.io/instance-type"
+              operator = "In"
+              values   = ["t3.small", "t3.micro"]
+            }
+          ]
+          nodeClassRef = {
+            group = "karpenter.k8s.aws"
+            kind  = "EC2NodeClass"
+            name  = "default"
+          }
+        }
+      }
+      limits = {
+        cpu = 20
+      }
+      disruption = {
+        consolidationPolicy = "WhenEmptyOrUnderutilized"
+        consolidateAfter    = "1m"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_manifest.karpenter_node_class]
+}
+

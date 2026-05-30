@@ -3,14 +3,9 @@ output "rds_endpoint" {
   value       = aws_db_instance.postgres.endpoint
 }
 
-output "msk_bootstrap_brokers_plaintext" {
-  description = "Plaintext connection host:port pairs for Kafka brokers"
-  value       = aws_msk_cluster.kafka.bootstrap_brokers
-}
-
-output "msk_bootstrap_brokers_tls" {
-  description = "TLS connection host:port pairs for Kafka brokers"
-  value       = aws_msk_cluster.kafka.bootstrap_brokers_tls
+output "kafka_endpoint" {
+  description = "The self-hosted Kafka service endpoint inside EKS"
+  value       = "kafka.default.svc.cluster.local:9092"
 }
 
 output "eso_iam_role_arn" {

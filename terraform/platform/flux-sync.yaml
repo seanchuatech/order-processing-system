@@ -20,5 +20,5 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./flux/apps/local
+  path: ./flux/apps/production
   targetNamespace: default
