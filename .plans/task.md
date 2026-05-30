@@ -1,0 +1,47 @@
+# Tasks
+
+- [x] Phase 0 — Project Scaffolding & Standards
+  - [x] Create `.plans/implementation_plan.md` (copied to workspace)
+  - [x] Create `.plans/task.md` and initialize tracking
+  - [x] Create `.gitignore` at root of workspace
+  - [x] Create global `AGENTS.md` (The Constitution)
+  - [x] Create `.agents/rules/coding-style.md`
+  - [x] Create `.agents/rules/git-conventions.md`
+  - [x] Create `.agents/rules/infra-guardrails.md`
+  - [x] Create `.agents/rules/security-rules.md`
+  - [x] Create `.agents/workflows/review-code.md`
+  - [x] Create `.agents/workflows/write-tests.md`
+  - [x] Create `.agents/workflows/new-service.md`
+  - [x] Create `SKILLS.md`
+  - [x] Create root `Makefile`
+  - [x] Create `.github/workflows/ci.yaml`
+- [x] Phase 1 — Go Services (Local, docker-compose)
+  - [x] Scaffold `services/order-service`
+  - [x] Implement `order-service` HTTP handler + Kafka publisher
+  - [x] Scaffold `services/notification-service`
+  - [x] Implement `notification-service` Kafka consumer
+  - [x] Add Dockerfiles & Makefiles for both services
+  - [x] Configure `docker-compose.yaml` (Kafka + Postgres + services)
+  - [x] Add unit tests & linting rules
+- [x] Phase 2 — The `app-generic` Helm Chart
+  - [x] Create `helm-charts/app-generic` chart
+  - [x] Implement deployment, service, ingress, HPA, and ExternalSecret templates
+  - [x] Write Helm Release base configurations for the 2 services
+- [x] Phase 3 — Local Kubernetes (Kind + Terraform + FluxCD)
+  - [x] Write Terraform config for Kind cluster (`terraform/bootstrap`)
+  - [x] Write Terraform config for operators (FluxCD, ESO, Ingress-NGINX) (`terraform/platform`)
+  - [x] Bootstrap FluxCD GitOps to watch the repo
+  - [x] Deploy the 2 services via Flux HelmRelease
+- [x] Phase 4 — External Secrets Operator (Local Simulation)
+  - [x] Set up local simulated vault using K8s secrets in `secrets-vault`
+  - [x] Connect ESO with `ClusterSecretStore`
+  - [x] Validate order-service secret injection
+- [x] Phase 5 — CI/CD Pipeline (GitHub Actions)
+  - [x] Complete `ci.yaml` (lint + test + helm-lint)
+  - [x] Complete `security.yaml` (gosec + trivy + checkov)
+  - [x] Complete `build-push.yaml` (build + push to GHCR + auto-tag update)
+- [x] Phase 6 — AWS Cloud Run
+  - [x] Write Terraform for AWS (VPC, EKS, Self-Hosted Kafka, RDS, SSM, IAM, Karpenter)
+  - [x] Bootstrap EKS cluster & FluxCD
+  - [x] Validate stack components (Scale, secrets, drift)
+  - [ ] Document with screenshots & destroy
