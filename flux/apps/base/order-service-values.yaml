@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/seanchuatech/order-processing-system/order-service
-  tag: latest
+  tag: 26ae6c3
   pullPolicy: IfNotPresent
 
 service:
