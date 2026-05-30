@@ -85,6 +85,7 @@ module "eks" {
 }
 
 module "ebs_csi_irsa_role" {
+  #checkov:skip=CKV_TF_1:Using public Terraform Registry modules with version constraints is standard practice
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.0"
 

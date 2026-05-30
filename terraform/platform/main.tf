@@ -161,12 +161,12 @@ resource "aws_db_instance" "postgres" {
 resource "aws_sqs_queue" "orders_created_dlq" {
   name                      = "ops-sandbox-orders-created-dlq"
   message_retention_seconds = 1209600 # 14 days
-  kms_master_key_id         = "alias/aws/sqs"
+  kms_master_key_id         = aws_kms_key.ssm.arn
 }
 
 resource "aws_sqs_queue" "orders_created" {
   name                      = "ops-sandbox-orders-created"
-  kms_master_key_id         = "alias/aws/sqs"
+  kms_master_key_id         = aws_kms_key.ssm.arn
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.orders_created_dlq.arn
     maxReceiveCount     = 3
@@ -303,6 +303,15 @@ data "aws_iam_policy_document" "order_service_sqs_access" {
     effect    = "Allow"
     resources = [aws_sqs_queue.orders_created.arn]
   }
+
+  statement {
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey"
+    ]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
+  }
 }
 
 resource "aws_iam_policy" "order_service" {
@@ -349,6 +358,14 @@ data "aws_iam_policy_document" "notification_service_sqs_access" {
     ]
     effect    = "Allow"
     resources = [aws_sqs_queue.orders_created.arn]
+  }
+
+  statement {
+    actions = [
+      "kms:Decrypt"
+    ]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
   }
 }
 
