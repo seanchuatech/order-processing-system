@@ -82,6 +82,11 @@ resource "aws_db_parameter_group" "postgres" {
     name  = "log_min_duration_statement"
     value = "1"
   }
+
+  parameter {
+    name  = "rds.force_ssl"
+    value = "1"
+  }
 }
 
 resource "aws_iam_role" "rds_monitoring" {
@@ -190,6 +195,21 @@ resource "aws_kms_key" "ssm" {
   description             = "KMS key for SSM parameters and database encryption"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "ssm-key-policy"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      }
+    ]
+  })
 
   tags = {
     Name = "ops-sandbox-ssm-key"
