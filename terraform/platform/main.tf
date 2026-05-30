@@ -256,6 +256,12 @@ data "aws_iam_policy_document" "eso_ssm_access" {
     effect    = "Allow"
     resources = ["arn:aws:ssm:us-east-1:${data.aws_caller_identity.current.account_id}:parameter/ops-sandbox/*"]
   }
+
+  statement {
+    actions   = ["kms:Decrypt"]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
+  }
 }
 
 resource "aws_iam_policy" "eso" {
