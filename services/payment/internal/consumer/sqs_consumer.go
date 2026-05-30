@@ -72,11 +72,7 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 				// Map order items to event items
 				eventItems := make([]domain.EventItem, len(order.Items))
 				for i, item := range order.Items {
-					eventItems[i] = domain.EventItem{
-						ProductID: item.ProductID,
-						Quantity:  item.Quantity,
-						Price:     item.Price,
-					}
+					eventItems[i] = domain.EventItem(item)
 				}
 
 				event := &domain.PaymentProcessedEvent{
