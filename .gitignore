@@ -2,6 +2,7 @@
 **/.terraform/
 *.tfstate
 *.tfstate.backup
+*.tfstate.*
 *.tfvars
 *.tfvars.json
 override.tf
@@ -10,6 +11,8 @@ _override.tf
 _override.tf.json
 .terraformrc
 terraform.rc
+.terraform.tfstate.lock.info
+*.lock.info
 
 # Go
 bin/
