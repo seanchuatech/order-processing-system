@@ -1,6 +1,6 @@
 .PHONY: lint test helm-lint docker-up docker-down build test-cover
 
-# Directory definitions
+# Directory definitions (append new services here when scaffolded, e.g. services/payment)
 SERVICES = services/order services/notification
 
 lint:

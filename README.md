@@ -11,19 +11,32 @@ This system is an event-driven order processing engine designed to orchestrate o
 
 ## Application Architecture
 
+Our event-driven order processing engine uses a decoupled choreography pattern built on **AWS SQS** (Simple Queue Service) and **AWS SNS** (Simple Notification Service) for broadcasting messages to downstream services.
+
 ```mermaid
 graph TD
     Client[Client / curl] -->|POST /orders :8090| OS[Order Service]
     OS -->|Transaction Write| DB[(PostgreSQL)]
-    OS -->|Publish orders.created| Kafka[Apache Kafka]
-    Kafka -->|Consume Event| NS[Notification Service]
+    OS -->|Publish| SQS_Pending[SQS: order-pending]
+    SQS_Pending --> PS[Payment Service]
+    PS -->|Publish| SNS_Processed[SNS: payment-processed]
+    SNS_Processed -->|Fanout| SQS_Notification[SQS: payment-processed-notification]
+    SNS_Processed -->|Fanout| SQS_Inventory[SQS: payment-processed-inventory]
+    SNS_Processed -->|Fanout| SQS_Analytics[SQS: payment-processed-analytics]
+    SQS_Notification --> NS[Notification Service]
+    SQS_Inventory --> IS[Inventory Service]
+    SQS_Analytics --> AS[Analytics Service]
     NS -->|Print Notification| Logs[Console / Stdout]
-    NS -->|GET /health :8081| Probes[K8s Liveness/Readiness Probes]
+    IS -->|Deduct Stock| DB
+    AS -->|Record Metrics| AnalyticsLogs[Metrics logs]
 ```
 
 ### Services Summary
-* **Order Service (`services/order`)**: Exposes an HTTP API on port `8090` to receive new orders. Validates requests, calculates total prices, stores order records in PostgreSQL, and publishes an `orders.created` event to Kafka.
-* **Notification Service (`services/notification`)**: An asynchronous consumer that subscribes to the Kafka `orders.created` topic and processes dispatch simulations, printing notification tasks to console. Exposes a separate HTTP health API on port `8081`.
+* **Order Service (`services/order`)** *(Active)*: Exposes an HTTP API on port `8090` to receive new orders. Stores order records in PostgreSQL, and publishes a message to the SQS `order-pending` queue.
+* **Notification Service (`services/notification`)** *(Active)*: An asynchronous consumer that subscribes to the `payment-processed-notification` SQS queue and processes dispatch simulations. Exposes a separate HTTP health API on port `8081`.
+* **Payment Service (`services/payment`)** *(Planned)*: Simulates credit card charging. Consumes from `order-pending` and publishes payment-processed events to an SNS topic.
+* **Inventory Service (`services/inventory`)** *(Planned)*: Listens to payment-processed events and deducts items from stock in the database.
+* **Analytics Service (`services/analytics`)** *(Planned)*: Aggregates order analytics.
 
 ---
 
