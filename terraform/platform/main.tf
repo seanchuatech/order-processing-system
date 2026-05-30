@@ -68,6 +68,45 @@ resource "aws_db_subnet_group" "rds" {
   }
 }
 
+resource "aws_db_parameter_group" "postgres" {
+  name        = "ops-sandbox-postgres-params"
+  family      = "postgres16"
+  description = "Custom parameter group for ops-sandbox postgres"
+
+  parameter {
+    name  = "log_statement"
+    value = "all"
+  }
+
+  parameter {
+    name  = "log_min_duration_statement"
+    value = "1"
+  }
+}
+
+resource "aws_iam_role" "rds_monitoring" {
+  name        = "ops-sandbox-rds-monitoring-role"
+  description = "Role for RDS enhanced monitoring logs"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "monitoring.rds.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
 resource "random_password" "db_password" {
   length           = 16
   special          = true
@@ -89,6 +128,7 @@ resource "aws_db_instance" "postgres" {
   password               = random_password.db_password.result
   db_subnet_group_name   = aws_db_subnet_group.rds.name
   vpc_security_group_ids = [aws_security_group.rds.id]
+  parameter_group_name   = aws_db_parameter_group.postgres.name
   skip_final_snapshot    = true
   multi_az               = false
 
@@ -96,6 +136,13 @@ resource "aws_db_instance" "postgres" {
   iam_database_authentication_enabled = true
   enabled_cloudwatch_logs_exports     = ["postgresql", "upgrade"]
   auto_minor_version_upgrade          = true
+  copy_tags_to_snapshot               = true
+
+  monitoring_interval = 60
+  monitoring_role_arn = aws_iam_role.rds_monitoring.arn
+
+  performance_insights_enabled    = true
+  performance_insights_kms_key_id = aws_kms_key.ssm.arn
 
   tags = {
     Name = "ops-sandbox-db"
@@ -139,11 +186,27 @@ resource "helm_release" "kafka" {
 # 3. AWS SSM Parameters (Secrets & Configs)
 # ==========================================
 
+resource "aws_kms_key" "ssm" {
+  description             = "KMS key for SSM parameters and database encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "ops-sandbox-ssm-key"
+  }
+}
+
+resource "aws_kms_alias" "ssm" {
+  name          = "alias/ops-sandbox-ssm"
+  target_key_id = aws_kms_key.ssm.key_id
+}
+
 resource "aws_ssm_parameter" "db_url" {
   name        = "/ops-sandbox/order-service/DATABASE_URL"
   description = "Database URL for the order service"
   type        = "SecureString"
   value       = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/orders?sslmode=disable"
+  key_id      = aws_kms_key.ssm.arn
 }
 
 # ==========================================
