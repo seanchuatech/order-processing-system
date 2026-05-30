@@ -13,20 +13,20 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/seanchuatech/order-processing-system/services/notification/internal/consumer"
+	"github.com/seanchuatech/order-processing-system/services/analytics/internal/consumer"
 )
 
 func main() {
-	log.Println("Starting Notification Service...")
+	log.Println("Starting Analytics Service...")
 
 	// 1. Load Configurations
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8081" // Different port to avoid conflict with order-service
+		port = "8094"
 	}
 	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
 	if sqsQueueURL == "" {
-		sqsQueueURL = "http://localhost:9324/000000000000/payment-processed-notification"
+		sqsQueueURL = "http://localhost:9324/000000000000/payment-processed-analytics"
 	}
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 
@@ -61,26 +61,25 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	})
 
-	healthServer := &http.Server{
+	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
 	}
 
-	// Run Health check HTTP server in background
 	go func() {
 		log.Printf("Health server listening on port %s", port)
-		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("Health server error: %v", err)
 		}
 	}()
 
-	// 5. Start SQS Consumer Loop in background
+	// 5. Start SQS Consumer Loop
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go func() {
 		if err := sqsConsumer.Start(ctx); err != nil {
-			log.Printf("SQS consumer stopped with error: %v", err)
+			log.Printf("SQS consumer stopped: %v", err)
 		}
 	}()
 
@@ -89,15 +88,15 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Shutting down gracefully...")
-	cancel() // Stop the SQS consumer loop
+	log.Println("Shutting down Analytics Service gracefully...")
+	cancel() // Stop consumer
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
-	if err := healthServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Health server shutdown error: %v", err)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
 	}
 
-	log.Println("Notification Service stopped.")
+	log.Println("Analytics Service stopped.")
 }

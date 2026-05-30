@@ -35,7 +35,7 @@ func main() {
 	}
 	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
 	if sqsQueueURL == "" {
-		sqsQueueURL = "http://localhost:9324/000000000000/orders-created"
+		sqsQueueURL = "http://localhost:9324/000000000000/order-pending"
 	}
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 

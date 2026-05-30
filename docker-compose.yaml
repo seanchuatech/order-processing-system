@@ -35,7 +35,7 @@ services:
     environment:
       PORT: 8090
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_db?sslmode=disable
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/orders-created
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/order-pending
       SQS_ENDPOINT: http://elasticmq:9324
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
@@ -55,7 +55,68 @@ services:
       - "8081:8081"
     environment:
       PORT: 8081
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/orders-created
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-notification
+      SQS_ENDPOINT: http://elasticmq:9324
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+    depends_on:
+      elasticmq:
+        condition: service_started
+
+  payment-service:
+    build:
+      context: ./services/payment
+      dockerfile: Dockerfile
+    container_name: payment-service
+    ports:
+      - "8092:8092"
+    environment:
+      PORT: 8092
+      LOCAL_MODE: "true"
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/order-pending
+      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_NOTIFICATION_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-notification
+      SQS_INVENTORY_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-inventory
+      SQS_ANALYTICS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-analytics
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+    depends_on:
+      elasticmq:
+        condition: service_started
+
+  inventory-service:
+    build:
+      context: ./services/inventory
+      dockerfile: Dockerfile
+    container_name: inventory-service
+    ports:
+      - "8093:8093"
+    environment:
+      PORT: 8093
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_db?sslmode=disable
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-inventory
+      SQS_ENDPOINT: http://elasticmq:9324
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+
+  analytics-service:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    ports:
+      - "8094:8094"
+    environment:
+      PORT: 8094
+      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-analytics
       SQS_ENDPOINT: http://elasticmq:9324
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock

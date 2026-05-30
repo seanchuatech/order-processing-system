@@ -4,16 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/seanchuatech/order-processing-system/services/notification/internal/domain"
+	"github.com/seanchuatech/order-processing-system/services/analytics/internal/domain"
 )
 
 type SQSConsumer struct {
 	client   *sqs.Client
 	queueURL string
+
+	// In-memory metrics tracking
+	mu                 sync.RWMutex
+	totalRevenue       float64
+	successfulPayments int
+	failedPayments     int
+	totalPayments      int
 }
 
 func NewSQSConsumer(client *sqs.Client, queueURL string) *SQSConsumer {
@@ -24,7 +32,7 @@ func NewSQSConsumer(client *sqs.Client, queueURL string) *SQSConsumer {
 }
 
 func (c *SQSConsumer) Start(ctx context.Context) error {
-	log.Println("Notification service SQS consumer starting...")
+	log.Println("Analytics service SQS consumer starting...")
 	for {
 		select {
 		case <-ctx.Done():
@@ -54,8 +62,30 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 					continue
 				}
 
-				log.Printf("[Notification Service] SUCCESS: Notification dispatched for Order ID: %s | Customer ID: %s | Status: %s | Total: $%.2f",
-					event.OrderID, event.CustomerID, event.Status, event.Amount)
+				// Update metrics
+				c.mu.Lock()
+				c.totalPayments++
+				if event.Status == "SUCCESS" {
+					c.successfulPayments++
+					c.totalRevenue += event.Amount
+				} else {
+					c.failedPayments++
+				}
+				totalRev := c.totalRevenue
+				successCount := c.successfulPayments
+				failedCount := c.failedPayments
+				totalCount := c.totalPayments
+				c.mu.Unlock()
+
+				successRate := 0.0
+				if totalCount > 0 {
+					successRate = (float64(successCount) / float64(totalCount)) * 100.0
+				}
+
+				log.Printf("[Analytics Service] PROCESSED: Order: %s | Status: %s | Amount: $%.2f",
+					event.OrderID, event.Status, event.Amount)
+				log.Printf("[Analytics Service] METRICS: Total Revenue: $%.2f | Successful: %d | Failed: %d | Success Rate: %.1f%%",
+					totalRev, successCount, failedCount, successRate)
 
 				// Delete message after successful processing
 				_, err = c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{

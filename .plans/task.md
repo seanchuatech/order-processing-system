@@ -40,8 +40,52 @@
   - [x] Complete `ci.yaml` (lint + test + helm-lint)
   - [x] Complete `security.yaml` (gosec + trivy + checkov)
   - [x] Complete `build-push.yaml` (build + push to GHCR + auto-tag update)
-- [x] Phase 6 — AWS Cloud Run
-  - [x] Write Terraform for AWS (VPC, EKS, Self-Hosted Kafka, RDS, SSM, IAM, Karpenter)
-  - [x] Bootstrap EKS cluster & FluxCD
-  - [x] Validate stack components (Scale, secrets, drift)
-  - [ ] Document with screenshots & destroy
+- [x] Phase 6 — AWS Cloud Run & SQS Migration
+  - [x] Update Go dependencies & code for order-service
+  - [x] Update Go dependencies & code for notification-service
+  - [x] Update local setup (docker-compose.yaml + elasticmq.conf)
+  - [x] Verify local pub/sub logic with docker-compose
+  - [x] Update generic Helm chart to support ServiceAccounts
+  - [x] Update Terraform configuration (create SQS, IAM roles, and EKS access entry)
+  - [x] Update FluxCD GitOps configuration values
+  - [x] Deploy to EKS and verify Karpenter node registration & pod scheduling
+  - [x] Verify end-to-end flow on AWS EKS
+  - [x] Destroy AWS infrastructure
+- [/] Phase 7 — Implement 3 Remaining Services (Payment, Inventory, Analytics)
+  - [x] Step 1: Update existing files for queue rename breaking change
+    - [x] Update `services/order` default queue URL to `order-pending`
+    - [x] Update `services/notification` to consume `payment-processed-notification`
+    - [x] Add SNS envelope unwrapping in `services/notification` consumer
+    - [x] Update `elasticmq.conf` with new queue names
+    - [x] Update `docker-compose.yaml` with renamed queues for order/notification
+    - [x] Update `go.work` to prepare for new services
+  - [x] Step 2: Scaffold and implement `payment-service`
+    - [x] Initialize module and add dependencies
+    - [x] Write domain logic & domain models
+    - [x] Write SNS event publisher (production) and direct SQS publisher (local mode)
+    - [x] Write SQS message consumer pulling from `order-pending`
+    - [x] Create Dockerfile & service Makefile
+  - [x] Step 3: Scaffold and implement `inventory-service`
+    - [x] Initialize module and database driver dependencies
+    - [x] Write postgres schema migrations & repo layer
+    - [x] Write SQS message consumer pulling from `payment-processed-inventory` with SNS unwrapping
+    - [x] Create Dockerfile & service Makefile
+  - [x] Step 4: Scaffold and implement `analytics-service`
+    - [x] Initialize module
+    - [x] Write SQS message consumer pulling from `payment-processed-analytics` with SNS unwrapping
+    - [x] Create Dockerfile & service Makefile
+  - [x] Step 5: Update project orchestration & CI/CD workflows
+    - [x] Update root `Makefile` to include test/lint/build for new services
+    - [x] Update `docker-compose.yaml` to run all 5 services locally
+    - [x] Update `.github/workflows/ci.yaml` to lint and test new services
+  - [x] Step 6: Verify entire stack locally via docker-compose
+  - [x] Step 7: Update infrastructure-as-code (Terraform Platform layer)
+    - [x] Provision `order-pending` and payment-processed queues/DLQs
+    - [x] Provision SNS topic `payment-processed-topic` and subscriptions
+    - [x] Provision IAM IRSA roles for the 3 new services
+    - [x] Create SSM Parameter `/ops-sandbox/inventory-service/DATABASE_URL`
+  - [x] Step 8: Update GitOps (FluxCD base configurations)
+    - [x] Update `order-service-values.yaml` and `notification-service-values.yaml`
+    - [x] Create HelmRelease manifests and values files for payment, inventory, and analytics
+    - [x] Update `kustomization.yaml` to register all HelmReleases
+  - [/] Step 9: Verify entire stack end-to-end on EKS

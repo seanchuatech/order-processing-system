@@ -154,22 +154,158 @@ resource "aws_db_instance" "postgres" {
 }
 
 # ==========================================
-# 2. AWS SQS Queues
+# 2. AWS SQS Queues & SNS Topics
 # ==========================================
 
-resource "aws_sqs_queue" "orders_created_dlq" {
-  name                      = "ops-sandbox-orders-created-dlq"
+resource "aws_sns_topic" "payment_processed" {
+  name              = "ops-sandbox-payment-processed-topic"
+  kms_master_key_id = aws_kms_key.ssm.arn
+}
+
+resource "aws_sqs_queue" "order_pending_dlq" {
+  name                      = "ops-sandbox-order-pending-dlq"
   message_retention_seconds = 1209600 # 14 days
   kms_master_key_id         = aws_kms_key.ssm.arn
 }
 
-resource "aws_sqs_queue" "orders_created" {
-  name                      = "ops-sandbox-orders-created"
+resource "aws_sqs_queue" "order_pending" {
+  name                      = "ops-sandbox-order-pending"
   kms_master_key_id         = aws_kms_key.ssm.arn
   redrive_policy = jsonencode({
-    deadLetterTargetArn = aws_sqs_queue.orders_created_dlq.arn
+    deadLetterTargetArn = aws_sqs_queue.order_pending_dlq.arn
     maxReceiveCount     = 3
   })
+}
+
+resource "aws_sqs_queue" "payment_processed_notification_dlq" {
+  name                      = "ops-sandbox-payment-processed-notification-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ssm.arn
+}
+
+resource "aws_sqs_queue" "payment_processed_notification" {
+  name                      = "ops-sandbox-payment-processed-notification"
+  kms_master_key_id         = aws_kms_key.ssm.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.payment_processed_notification_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+resource "aws_sqs_queue" "payment_processed_inventory_dlq" {
+  name                      = "ops-sandbox-payment-processed-inventory-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ssm.arn
+}
+
+resource "aws_sqs_queue" "payment_processed_inventory" {
+  name                      = "ops-sandbox-payment-processed-inventory"
+  kms_master_key_id         = aws_kms_key.ssm.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.payment_processed_inventory_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+resource "aws_sqs_queue" "payment_processed_analytics_dlq" {
+  name                      = "ops-sandbox-payment-processed-analytics-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.ssm.arn
+}
+
+resource "aws_sqs_queue" "payment_processed_analytics" {
+  name                      = "ops-sandbox-payment-processed-analytics"
+  kms_master_key_id         = aws_kms_key.ssm.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.payment_processed_analytics_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+# SNS Subscriptions
+resource "aws_sns_topic_subscription" "notification" {
+  topic_arn = aws_sns_topic.payment_processed.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.payment_processed_notification.arn
+}
+
+resource "aws_sns_topic_subscription" "inventory" {
+  topic_arn = aws_sns_topic.payment_processed.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.payment_processed_inventory.arn
+}
+
+resource "aws_sns_topic_subscription" "analytics" {
+  topic_arn = aws_sns_topic.payment_processed.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.payment_processed_analytics.arn
+}
+
+# SQS Queue Policies to allow SNS publishing
+data "aws_iam_policy_document" "sqs_sns_policy_notification" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.payment_processed_notification.arn]
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_sns_topic.payment_processed.arn]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "notification" {
+  queue_url = aws_sqs_queue.payment_processed_notification.id
+  policy    = data.aws_iam_policy_document.sqs_sns_policy_notification.json
+}
+
+data "aws_iam_policy_document" "sqs_sns_policy_inventory" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.payment_processed_inventory.arn]
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_sns_topic.payment_processed.arn]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "inventory" {
+  queue_url = aws_sqs_queue.payment_processed_inventory.id
+  policy    = data.aws_iam_policy_document.sqs_sns_policy_inventory.json
+}
+
+data "aws_iam_policy_document" "sqs_sns_policy_analytics" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.payment_processed_analytics.arn]
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_sns_topic.payment_processed.arn]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "analytics" {
+  queue_url = aws_sqs_queue.payment_processed_analytics.id
+  policy    = data.aws_iam_policy_document.sqs_sns_policy_analytics.json
 }
 
 # ==========================================
@@ -209,6 +345,14 @@ resource "aws_kms_alias" "ssm" {
 resource "aws_ssm_parameter" "db_url" {
   name        = "/ops-sandbox/order-service/DATABASE_URL"
   description = "Database URL for the order service"
+  type        = "SecureString"
+  value       = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/orders?sslmode=require"
+  key_id      = aws_kms_key.ssm.arn
+}
+
+resource "aws_ssm_parameter" "inventory_db_url" {
+  name        = "/ops-sandbox/inventory-service/DATABASE_URL"
+  description = "Database URL for the inventory service"
   type        = "SecureString"
   value       = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/orders?sslmode=require"
   key_id      = aws_kms_key.ssm.arn
@@ -275,7 +419,7 @@ resource "aws_iam_role_policy_attachment" "eso" {
 }
 
 # ==========================================
-# 4a. Order Service & Notification Service IRSA Roles
+# 4a. Microservices IRSA Roles
 # ==========================================
 
 # Order Service IRSA Role
@@ -306,7 +450,7 @@ data "aws_iam_policy_document" "order_service_sqs_access" {
   statement {
     actions   = ["sqs:SendMessage"]
     effect    = "Allow"
-    resources = [aws_sqs_queue.orders_created.arn]
+    resources = [aws_sqs_queue.order_pending.arn]
   }
 
   statement {
@@ -362,7 +506,7 @@ data "aws_iam_policy_document" "notification_service_sqs_access" {
       "sqs:GetQueueAttributes"
     ]
     effect    = "Allow"
-    resources = [aws_sqs_queue.orders_created.arn]
+    resources = [aws_sqs_queue.payment_processed_notification.arn]
   }
 
   statement {
@@ -383,6 +527,178 @@ resource "aws_iam_policy" "notification_service" {
 resource "aws_iam_role_policy_attachment" "notification_service" {
   role       = aws_iam_role.notification_service.name
   policy_arn = aws_iam_policy.notification_service.arn
+}
+
+# Payment Service IRSA Role
+data "aws_iam_policy_document" "payment_service_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:default:payment-service"]
+    }
+
+    principals {
+      identifiers = [data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn]
+      type        = "Federated"
+    }
+  }
+}
+
+resource "aws_iam_role" "payment_service" {
+  name               = "ops-sandbox-payment-service-role"
+  assume_role_policy = data.aws_iam_policy_document.payment_service_assume_role.json
+}
+
+data "aws_iam_policy_document" "payment_service_access" {
+  statement {
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes"
+    ]
+    effect    = "Allow"
+    resources = [aws_sqs_queue.order_pending.arn]
+  }
+
+  statement {
+    actions   = ["sns:Publish"]
+    effect    = "Allow"
+    resources = [aws_sns_topic.payment_processed.arn]
+  }
+
+  statement {
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey"
+    ]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
+  }
+}
+
+resource "aws_iam_policy" "payment_service" {
+  name        = "ops-sandbox-payment-service-policy"
+  description = "Allow payment-service to consume SQS and publish to SNS"
+  policy      = data.aws_iam_policy_document.payment_service_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "payment_service" {
+  role       = aws_iam_role.payment_service.name
+  policy_arn = aws_iam_policy.payment_service.arn
+}
+
+# Inventory Service IRSA Role
+data "aws_iam_policy_document" "inventory_service_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:default:inventory-service"]
+    }
+
+    principals {
+      identifiers = [data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn]
+      type        = "Federated"
+    }
+  }
+}
+
+resource "aws_iam_role" "inventory_service" {
+  name               = "ops-sandbox-inventory-service-role"
+  assume_role_policy = data.aws_iam_policy_document.inventory_service_assume_role.json
+}
+
+data "aws_iam_policy_document" "inventory_service_access" {
+  statement {
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes"
+    ]
+    effect    = "Allow"
+    resources = [aws_sqs_queue.payment_processed_inventory.arn]
+  }
+
+  statement {
+    actions = [
+      "kms:Decrypt"
+    ]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
+  }
+}
+
+resource "aws_iam_policy" "inventory_service" {
+  name        = "ops-sandbox-inventory-service-policy"
+  description = "Allow inventory-service to consume SQS"
+  policy      = data.aws_iam_policy_document.inventory_service_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "inventory_service" {
+  role       = aws_iam_role.inventory_service.name
+  policy_arn = aws_iam_policy.inventory_service.arn
+}
+
+# Analytics Service IRSA Role
+data "aws_iam_policy_document" "analytics_service_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_provider_url}:sub"
+      values   = ["system:serviceaccount:default:analytics-service"]
+    }
+
+    principals {
+      identifiers = [data.terraform_remote_state.bootstrap.outputs.oidc_provider_arn]
+      type        = "Federated"
+    }
+  }
+}
+
+resource "aws_iam_role" "analytics_service" {
+  name               = "ops-sandbox-analytics-service-role"
+  assume_role_policy = data.aws_iam_policy_document.analytics_service_assume_role.json
+}
+
+data "aws_iam_policy_document" "analytics_service_access" {
+  statement {
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes"
+    ]
+    effect    = "Allow"
+    resources = [aws_sqs_queue.payment_processed_analytics.arn]
+  }
+
+  statement {
+    actions = [
+      "kms:Decrypt"
+    ]
+    effect    = "Allow"
+    resources = [aws_kms_key.ssm.arn]
+  }
+}
+
+resource "aws_iam_policy" "analytics_service" {
+  name        = "ops-sandbox-analytics-service-policy"
+  description = "Allow analytics-service to consume SQS"
+  policy      = data.aws_iam_policy_document.analytics_service_access.json
+}
+
+resource "aws_iam_role_policy_attachment" "analytics_service" {
+  role       = aws_iam_role.analytics_service.name
+  policy_arn = aws_iam_policy.analytics_service.arn
 }
 
 # ==========================================

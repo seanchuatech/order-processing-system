@@ -5,12 +5,12 @@ output "rds_endpoint" {
 
 output "sqs_queue_url" {
   description = "URL of the provisioned AWS SQS queue"
-  value       = aws_sqs_queue.orders_created.id
+  value       = aws_sqs_queue.order_pending.id
 }
 
 output "sqs_queue_arn" {
   description = "ARN of the provisioned AWS SQS queue"
-  value       = aws_sqs_queue.orders_created.arn
+  value       = aws_sqs_queue.order_pending.arn
 }
 
 output "eso_iam_role_arn" {

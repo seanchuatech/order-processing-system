@@ -8,23 +8,26 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/seanchuatech/order-processing-system/services/notification/internal/domain"
+	"github.com/seanchuatech/order-processing-system/services/inventory/internal/domain"
+	"github.com/seanchuatech/order-processing-system/services/inventory/internal/repository"
 )
 
 type SQSConsumer struct {
 	client   *sqs.Client
 	queueURL string
+	repo     *repository.PostgresInventoryRepository
 }
 
-func NewSQSConsumer(client *sqs.Client, queueURL string) *SQSConsumer {
+func NewSQSConsumer(client *sqs.Client, queueURL string, repo *repository.PostgresInventoryRepository) *SQSConsumer {
 	return &SQSConsumer{
 		client:   client,
 		queueURL: queueURL,
+		repo:     repo,
 	}
 }
 
 func (c *SQSConsumer) Start(ctx context.Context) error {
-	log.Println("Notification service SQS consumer starting...")
+	log.Println("Inventory service SQS consumer starting...")
 	for {
 		select {
 		case <-ctx.Done():
@@ -54,8 +57,16 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 					continue
 				}
 
-				log.Printf("[Notification Service] SUCCESS: Notification dispatched for Order ID: %s | Customer ID: %s | Status: %s | Total: $%.2f",
-					event.OrderID, event.CustomerID, event.Status, event.Amount)
+				if event.Status == "SUCCESS" {
+					log.Printf("[Inventory Service] Processing SUCCESS payment for Order ID: %s. Deducting stock...", event.OrderID)
+					for _, item := range event.Items {
+						if err := c.repo.DeductStock(ctx, item.ProductID, item.Quantity); err != nil {
+							log.Printf("Error deducting stock for product %s in order %s: %v", item.ProductID, event.OrderID, err)
+						}
+					}
+				} else {
+					log.Printf("[Inventory Service] Skipping stock deduction for failed payment of Order ID: %s", event.OrderID)
+				}
 
 				// Delete message after successful processing
 				_, err = c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{

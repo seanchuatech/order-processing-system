@@ -3,6 +3,9 @@ kind: Kustomization
 resources:
   - order-service.yaml
   - notification-service.yaml
+  - payment-service.yaml
+  - inventory-service.yaml
+  - analytics-service.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -14,3 +17,12 @@ configMapGenerator:
   - name: notification-service-values
     files:
       - notification-service-values.yaml
+  - name: payment-service-values
+    files:
+      - payment-service-values.yaml
+  - name: inventory-service-values
+    files:
+      - inventory-service-values.yaml
+  - name: analytics-service-values
+    files:
+      - analytics-service-values.yaml

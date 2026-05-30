@@ -1,0 +1,14 @@
+# Ignore host-built binaries and local tool outputs
+bin/
+*.test
+*.out
+*.html
+
+# Ignore IDE/Editor configs
+.idea/
+.vscode/
+*.swp
+
+# Ignore Docker metadata files
+Dockerfile
+.dockerignore
