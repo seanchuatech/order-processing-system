@@ -2,5 +2,5 @@
 # Override the targeted Go version for AST analysis.
 
 run:
-  go: '1.24'
+  go: '1.26'
   timeout: 5m
