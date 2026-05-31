@@ -37,7 +37,7 @@ helm-lint:
 	fi
 
 docker-up:
-	@echo "==> Starting local infrastructure (PostgreSQL, Kafka) and Go services..."
+	@echo "==> Starting local infrastructure (PostgreSQL, ElasticMQ, Jaeger, Prometheus, Grafana) and Go services..."
 	docker compose up -d --build
 
 docker-down:

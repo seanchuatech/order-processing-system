@@ -142,7 +142,7 @@ func TestCreateOrder(t *testing.T) {
 			mockPub: func() *mockPublisher {
 				return &mockPublisher{
 					publishFunc: func(ctx context.Context, order *domain.Order) error {
-						return errors.New("kafka publish error")
+						return errors.New("sqs publish error")
 					},
 				}
 			},

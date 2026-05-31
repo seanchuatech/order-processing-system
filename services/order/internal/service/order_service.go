@@ -62,7 +62,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, customerID string, items
 	// 2. Publish Event
 	if err := s.publisher.PublishOrderCreated(ctx, order); err != nil {
 		// Log error but do not fail the request completely since DB succeeded (or we can return error)
-		// For consistency in our local system, let's treat Kafka publish failures as errors
+		// For consistency in our local system, let's treat SQS publish failures as errors
 		return nil, fmt.Errorf("failed to publish order event: %w", err)
 	}
 
