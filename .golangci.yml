@@ -2,7 +2,6 @@
 # Override the targeted Go version for AST analysis.
 # This prevents failures when running golangci-lint on codebases targeting Go versions (e.g. 1.26.0) 
 # higher than the version golangci-lint was built with (e.g. Go 1.24).
-go: '1.24'
 
 run:
   go: '1.24'
