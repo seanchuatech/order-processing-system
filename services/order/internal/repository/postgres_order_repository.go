@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/domain"
 )
@@ -27,23 +29,39 @@ func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Orde
 	}()
 
 	orderQuery := `
-		INSERT INTO orders (id, customer_id, total_price, status, created_at)
+		INSERT INTO orders (id, customer_id, total_price_cents, status, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`
-	_, err = tx.ExecContext(ctx, orderQuery, order.ID, order.CustomerID, order.TotalPrice, order.Status, order.CreatedAt)
+	_, err = tx.ExecContext(ctx, orderQuery, order.ID, order.CustomerID, order.TotalPriceCents, order.Status, order.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to insert order: %w", err)
 	}
 
 	itemQuery := `
-		INSERT INTO order_items (order_id, product_id, quantity, price)
+		INSERT INTO order_items (order_id, product_id, quantity, price_cents)
 		VALUES ($1, $2, $3, $4)
 	`
 	for _, item := range order.Items {
-		_, err = tx.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.Price)
+		_, err = tx.ExecContext(ctx, itemQuery, order.ID, item.ProductID, item.Quantity, item.PriceCents)
 		if err != nil {
 			return fmt.Errorf("failed to insert order item (%s): %w", item.ProductID, err)
 		}
+	}
+
+	// Insert into outbox table
+	payload, err := json.Marshal(order)
+	if err != nil {
+		return fmt.Errorf("failed to marshal order outbox payload: %w", err)
+	}
+
+	outboxQuery := `
+		INSERT INTO outbox (id, aggregate_id, payload, status, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`
+	outboxID := uuid.New().String()
+	_, err = tx.ExecContext(ctx, outboxQuery, outboxID, order.ID, payload, "pending", order.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to insert outbox record: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -55,13 +73,13 @@ func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Orde
 
 func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*domain.Order, error) {
 	orderQuery := `
-		SELECT id, customer_id, total_price, status, created_at
+		SELECT id, customer_id, total_price_cents, status, created_at
 		FROM orders
 		WHERE id = $1
 	`
 	var order domain.Order
 	err := r.db.QueryRowContext(ctx, orderQuery, id).Scan(
-		&order.ID, &order.CustomerID, &order.TotalPrice, &order.Status, &order.CreatedAt,
+		&order.ID, &order.CustomerID, &order.TotalPriceCents, &order.Status, &order.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("order not found: %s", id)
@@ -70,7 +88,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 	}
 
 	itemsQuery := `
-		SELECT product_id, quantity, price
+		SELECT product_id, quantity, price_cents
 		FROM order_items
 		WHERE order_id = $1
 	`
@@ -82,7 +100,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.ProductID, &item.Quantity, &item.Price); err != nil {
+		if err := rows.Scan(&item.ProductID, &item.Quantity, &item.PriceCents); err != nil {
 			return nil, fmt.Errorf("failed to scan order item: %w", err)
 		}
 		order.Items = append(order.Items, item)

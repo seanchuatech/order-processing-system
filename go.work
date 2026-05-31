@@ -5,5 +5,6 @@ use (
 	./services/inventory
 	./services/notification
 	./services/order
+	./services/outbox-relay
 	./services/payment
 )

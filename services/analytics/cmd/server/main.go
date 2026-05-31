@@ -45,7 +45,7 @@ func main() {
 	}
 	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
 	if sqsQueueURL == "" {
-		sqsQueueURL = "http://localhost:9324/000000000000/payment-processed-analytics"
+		sqsQueueURL = "http://localhost:4566/000000000000/payment-processed-analytics"
 	}
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 

@@ -12,9 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/seanchuatech/order-processing-system/services/order/internal/handler"
@@ -54,12 +51,6 @@ func main() {
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/order_db?sslmode=disable"
 	}
-	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
-	if sqsQueueURL == "" {
-		sqsQueueURL = "http://localhost:9324/000000000000/order-pending"
-	}
-	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
-
 	// 2. Connect to Database (with retry loop for docker-compose start sequence)
 	var db *sql.DB
 	for i := 1; i <= 10; i++ {
@@ -86,32 +77,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 4. Initialize AWS SQS Client
-	cfg, err := config.LoadDefaultConfig(context.Background())
-	if err != nil {
-		slog.Error("unable to load AWS SDK config", "error", err)
-		os.Exit(1)
-	}
-
-	var sqsClient *sqs.Client
-	if sqsEndpoint != "" {
-		sqsClient = sqs.NewFromConfig(cfg, func(o *sqs.Options) {
-			o.BaseEndpoint = aws.String(sqsEndpoint)
-		})
-	} else {
-		sqsClient = sqs.NewFromConfig(cfg)
-	}
-
-	// 5. Initialize Components
+	// 4. Initialize Components
 	orderRepo := repository.NewPostgresOrderRepository(db)
-	eventPublisher := repository.NewSQSEventPublisher(sqsClient, sqsQueueURL)
-	defer func() {
-		if err := eventPublisher.Close(); err != nil {
-			slog.Error("Error closing SQS event publisher", "error", err)
-		}
-	}()
-
-	orderService := service.NewOrderService(orderRepo, eventPublisher)
+	orderService := service.NewOrderService(orderRepo)
 	orderHandler := handler.NewOrderHandler(orderService)
 
 	mux := http.NewServeMux()
@@ -158,7 +126,7 @@ func setupDatabaseSchema(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS orders (
 			id VARCHAR(50) PRIMARY KEY,
 			customer_id VARCHAR(50) NOT NULL,
-			total_price NUMERIC(10, 2) NOT NULL,
+			total_price_cents BIGINT NOT NULL,
 			status VARCHAR(20) NOT NULL,
 			created_at TIMESTAMP WITH TIME ZONE NOT NULL
 		);
@@ -169,7 +137,16 @@ func setupDatabaseSchema(db *sql.DB) error {
 			order_id VARCHAR(50) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
 			product_id VARCHAR(50) NOT NULL,
 			quantity INT NOT NULL,
-			price NUMERIC(10, 2) NOT NULL
+			price_cents BIGINT NOT NULL
+		);
+	`
+	outboxTable := `
+		CREATE TABLE IF NOT EXISTS outbox (
+			id VARCHAR(50) PRIMARY KEY,
+			aggregate_id VARCHAR(50) NOT NULL,
+			payload JSONB NOT NULL,
+			status VARCHAR(20) NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE NOT NULL
 		);
 	`
 	if _, err := db.Exec(ordersTable); err != nil {
@@ -177,6 +154,9 @@ func setupDatabaseSchema(db *sql.DB) error {
 	}
 	if _, err := db.Exec(orderItemsTable); err != nil {
 		return fmt.Errorf("failed to create order_items table: %w", err)
+	}
+	if _, err := db.Exec(outboxTable); err != nil {
+		return fmt.Errorf("failed to create outbox table: %w", err)
 	}
 	return nil
 }

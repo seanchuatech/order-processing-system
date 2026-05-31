@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	
+
 	"github.com/seanchuatech/order-processing-system/services/order/internal/domain"
 )
 

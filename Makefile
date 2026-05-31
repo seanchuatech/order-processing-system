@@ -1,7 +1,7 @@
 .PHONY: lint test helm-lint docker-up docker-down build test-cover
 
 # Directory definitions (append new services here when scaffolded, e.g. services/payment)
-SERVICES = services/order services/notification services/payment services/inventory services/analytics
+SERVICES = services/order services/notification services/payment services/inventory services/analytics services/outbox-relay
 
 lint:
 	@echo "==> Running golangci-lint on all services..."

@@ -222,6 +222,46 @@ resource "aws_sqs_queue" "payment_processed_analytics" {
   })
 }
 
+# CloudWatch Metric Alarms for all DLQs
+locals {
+  dlqs = {
+    "order-pending" = {
+      queue_name = aws_sqs_queue.order_pending_dlq.name
+      desc       = "Order Pending Dead Letter Queue"
+    }
+    "payment-notification" = {
+      queue_name = aws_sqs_queue.payment_processed_notification_dlq.name
+      desc       = "Payment Processed Notification Dead Letter Queue"
+    }
+    "payment-inventory" = {
+      queue_name = aws_sqs_queue.payment_processed_inventory_dlq.name
+      desc       = "Payment Processed Inventory Dead Letter Queue"
+    }
+    "payment-analytics" = {
+      queue_name = aws_sqs_queue.payment_processed_analytics_dlq.name
+      desc       = "Payment Processed Analytics Dead Letter Queue"
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dlq_alarms" {
+  for_each            = local.dlqs
+  alarm_name          = "ops-sandbox-${each.key}-dlq-non-empty"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Triggers when there are messages in the ${each.value.desc}"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = each.value.queue_name
+  }
+}
+
 # SNS Subscriptions
 resource "aws_sns_topic_subscription" "notification" {
   topic_arn = aws_sns_topic.payment_processed.arn
@@ -431,7 +471,10 @@ data "aws_iam_policy_document" "order_service_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "${local.oidc_provider_url}:sub"
-      values   = ["system:serviceaccount:default:order-service"]
+      values   = [
+        "system:serviceaccount:default:order-service",
+        "system:serviceaccount:default:outbox-relay"
+      ]
     }
 
     principals {

@@ -1,14 +1,19 @@
 services:
-  elasticmq:
-    image: softwaremill/elasticmq-native:1.6.6
-    container_name: elasticmq
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: localstack
     ports:
-      - "9324:9324"
-      - "9325:9325"
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,sns
+      - AWS_DEFAULT_REGION=us-east-1
     volumes:
-      - ./elasticmq.conf:/opt/elasticmq.conf
-    # Runs native binary using custom config path
-    command: -Dconfig.file=/opt/elasticmq.conf
+      - ./localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres:
     image: postgres:16-alpine
@@ -71,8 +76,8 @@ services:
     environment:
       PORT: 8090
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_db?sslmode=disable
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/order-pending
-      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/order-pending
+      SQS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
@@ -80,8 +85,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      elasticmq:
-        condition: service_started
+      localstack:
+        condition: service_healthy
       jaeger:
         condition: service_started
 
@@ -94,15 +99,15 @@ services:
       - "8081:8081"
     environment:
       PORT: 8081
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-notification
-      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/payment-processed-notification
+      SQS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
-      elasticmq:
-        condition: service_started
+      localstack:
+        condition: service_healthy
       jaeger:
         condition: service_started
 
@@ -115,19 +120,17 @@ services:
       - "8092:8092"
     environment:
       PORT: 8092
-      LOCAL_MODE: "true"
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/order-pending
-      SQS_ENDPOINT: http://elasticmq:9324
-      SQS_NOTIFICATION_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-notification
-      SQS_INVENTORY_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-inventory
-      SQS_ANALYTICS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-analytics
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/order-pending
+      SQS_ENDPOINT: http://localstack:4566
+      SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:payment-processed
+      SNS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
-      elasticmq:
-        condition: service_started
+      localstack:
+        condition: service_healthy
       jaeger:
         condition: service_started
 
@@ -141,8 +144,8 @@ services:
     environment:
       PORT: 8093
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_db?sslmode=disable
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-inventory
-      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/payment-processed-inventory
+      SQS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
@@ -150,8 +153,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      elasticmq:
-        condition: service_started
+      localstack:
+        condition: service_healthy
       jaeger:
         condition: service_started
 
@@ -164,14 +167,35 @@ services:
       - "8094:8094"
     environment:
       PORT: 8094
-      SQS_QUEUE_URL: http://elasticmq:9324/000000000000/payment-processed-analytics
-      SQS_ENDPOINT: http://elasticmq:9324
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/payment-processed-analytics
+      SQS_ENDPOINT: http://localstack:4566
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
     depends_on:
-      elasticmq:
-        condition: service_started
+      localstack:
+        condition: service_healthy
       jaeger:
         condition: service_started
+
+  outbox-relay:
+    build:
+      context: ./services/outbox-relay
+      dockerfile: Dockerfile
+    container_name: outbox-relay
+    ports:
+      - "8095:8095"
+    environment:
+      PORT: 8095
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_db?sslmode=disable
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/order-pending
+      SQS_ENDPOINT: http://localstack:4566
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy

@@ -6,6 +6,7 @@ resources:
   - payment-service.yaml
   - inventory-service.yaml
   - analytics-service.yaml
+  - outbox-relay.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -26,3 +27,6 @@ configMapGenerator:
   - name: analytics-service-values
     files:
       - analytics-service-values.yaml
+  - name: outbox-relay-values
+    files:
+      - outbox-relay-values.yaml

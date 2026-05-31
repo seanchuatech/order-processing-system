@@ -47,11 +47,11 @@ func main() {
 	}
 	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
 	if sqsQueueURL == "" {
-		sqsQueueURL = "http://localhost:9324/000000000000/order-pending"
+		sqsQueueURL = "http://localhost:4566/000000000000/order-pending"
 	}
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 	snsTopicARN := os.Getenv("SNS_TOPIC_ARN")
-	localMode := os.Getenv("LOCAL_MODE") == "true"
+	snsEndpoint := os.Getenv("SNS_ENDPOINT")
 
 	// 2. Initialize AWS Config
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -69,40 +69,25 @@ func main() {
 		sqsClient = sqs.NewFromConfig(cfg)
 	}
 
-	// 3. Initialize Event Publisher based on Local/Prod Mode
-	var publisher repository.EventPublisher
-	if localMode {
-		slog.Info("Initializing Payment Service in LOCAL DIRECT SQS mode...")
-		notifURL := os.Getenv("SQS_NOTIFICATION_QUEUE_URL")
-		if notifURL == "" {
-			notifURL = "http://localhost:9324/000000000000/payment-processed-notification"
-		}
-		invURL := os.Getenv("SQS_INVENTORY_QUEUE_URL")
-		if invURL == "" {
-			invURL = "http://localhost:9324/000000000000/payment-processed-inventory"
-		}
-		analyticsURL := os.Getenv("SQS_ANALYTICS_QUEUE_URL")
-		if analyticsURL == "" {
-			analyticsURL = "http://localhost:9324/000000000000/payment-processed-analytics"
-		}
-
-		publisher = repository.NewSQSEventPublisher(sqsClient, []string{notifURL, invURL, analyticsURL})
-	} else {
-		slog.Info("Initializing Payment Service in SNS FANOUT mode...")
-		if snsTopicARN == "" {
-			slog.Error("SNS_TOPIC_ARN must be set when LOCAL_MODE is false")
-			os.Exit(1)
-		}
-		var snsClient *sns.Client
-		if sqsEndpoint != "" { // local emulation if needed, but normally not used
-			snsClient = sns.NewFromConfig(cfg, func(o *sns.Options) {
-				o.BaseEndpoint = aws.String(sqsEndpoint)
-			})
-		} else {
-			snsClient = sns.NewFromConfig(cfg)
-		}
-		publisher = repository.NewSNSEventPublisher(snsClient, snsTopicARN)
+	// 3. Initialize Event Publisher (SNS Fan-Out)
+	slog.Info("Initializing Payment Service in SNS FANOUT mode...")
+	if snsTopicARN == "" {
+		slog.Error("SNS_TOPIC_ARN must be set")
+		os.Exit(1)
 	}
+	var snsClient *sns.Client
+	if snsEndpoint != "" {
+		snsClient = sns.NewFromConfig(cfg, func(o *sns.Options) {
+			o.BaseEndpoint = aws.String(snsEndpoint)
+		})
+	} else if sqsEndpoint != "" {
+		snsClient = sns.NewFromConfig(cfg, func(o *sns.Options) {
+			o.BaseEndpoint = aws.String(sqsEndpoint)
+		})
+	} else {
+		snsClient = sns.NewFromConfig(cfg)
+	}
+	publisher := repository.NewSNSEventPublisher(snsClient, snsTopicARN)
 
 	// 4. Initialize SQS Consumer
 	sqsConsumer := consumer.NewSQSConsumer(sqsClient, sqsQueueURL, publisher)

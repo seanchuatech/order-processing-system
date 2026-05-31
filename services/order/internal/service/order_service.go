@@ -13,13 +13,11 @@ import (
 
 type OrderService struct {
 	orderRepo repository.OrderRepository
-	publisher repository.EventPublisher
 }
 
-func NewOrderService(orderRepo repository.OrderRepository, publisher repository.EventPublisher) *OrderService {
+func NewOrderService(orderRepo repository.OrderRepository) *OrderService {
 	return &OrderService{
 		orderRepo: orderRepo,
-		publisher: publisher,
 	}
 }
 
@@ -31,7 +29,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, customerID string, items
 		return nil, errors.New("order must contain at least one item")
 	}
 
-	var totalPrice float64
+	var totalPriceCents int64
 	for _, item := range items {
 		if item.ProductID == "" {
 			return nil, errors.New("product ID is required for all items")
@@ -39,31 +37,24 @@ func (s *OrderService) CreateOrder(ctx context.Context, customerID string, items
 		if item.Quantity <= 0 {
 			return nil, errors.New("quantity must be greater than zero")
 		}
-		if item.Price < 0 {
+		if item.PriceCents < 0 {
 			return nil, errors.New("price cannot be negative")
 		}
-		totalPrice += float64(item.Quantity) * item.Price
+		totalPriceCents += int64(item.Quantity) * item.PriceCents
 	}
 
 	order := &domain.Order{
-		ID:         uuid.New().String(),
-		CustomerID: customerID,
-		Items:      items,
-		TotalPrice: totalPrice,
-		Status:     "PENDING",
-		CreatedAt:  time.Now().UTC(),
+		ID:              uuid.New().String(),
+		CustomerID:      customerID,
+		Items:           items,
+		TotalPriceCents: totalPriceCents,
+		Status:          "PENDING",
+		CreatedAt:       time.Now().UTC(),
 	}
 
 	// 1. Save to Database
 	if err := s.orderRepo.Create(ctx, order); err != nil {
 		return nil, fmt.Errorf("failed to save order: %w", err)
-	}
-
-	// 2. Publish Event
-	if err := s.publisher.PublishOrderCreated(ctx, order); err != nil {
-		// Log error but do not fail the request completely since DB succeeded (or we can return error)
-		// For consistency in our local system, let's treat SQS publish failures as errors
-		return nil, fmt.Errorf("failed to publish order event: %w", err)
 	}
 
 	return order, nil

@@ -12,13 +12,14 @@ This system is an event-driven order processing engine designed to orchestrate o
 ## Architecture
 
 ### Application Architecture
-Our event-driven order processing engine uses a decoupled choreography pattern built on **AWS SQS** (Simple Queue Service) and **AWS SNS** (Simple Notification Service) for broadcasting events to downstream services.
+Our event-driven order processing engine uses a decoupled choreography pattern built on **AWS SQS** (Simple Queue Service) and **AWS SNS** (Simple Notification Service) for broadcasting events to downstream services. To guarantee eventual consistency and avoid dual-write failures, order submission uses the **Transactional Outbox Pattern** with a separate background relay.
 
 ```mermaid
 graph TD
     Client[Client / curl] -->|POST /orders :8090| OS[Order Service]
-    OS -->|Transaction Write| DB[(PostgreSQL)]
-    OS -->|Publish| SQS_Pending[SQS: order-pending]
+    OS -->|Atomic Transaction Write| DB[(PostgreSQL)]
+    OR[Outbox Relay :8095] -->|Poll & FOR UPDATE SKIP LOCKED| DB
+    OR -->|Publish| SQS_Pending[SQS: order-pending]
     SQS_Pending --> PS[Payment Service]
     PS -->|Publish| SNS_Processed[SNS: payment-processed]
     SNS_Processed -->|Fanout| SQS_Notification[SQS: payment-processed-notification]
@@ -171,7 +172,8 @@ graph TD
 
 ## Services
 
-* **Order Service (`services/order`)**: Exposes an HTTP API (`:8090`) to register new orders, writes records to PostgreSQL, and publishes messages to SQS.
+* **Order Service (`services/order`)**: Exposes an HTTP API (`:8090`) to register new orders, writes records and outbox event payloads atomically to PostgreSQL.
+* **Outbox Relay (`services/outbox-relay`)**: Background service (`:8095`) that polls the database `outbox` table and forwards pending events to SQS.
 * **Payment Service (`services/payment`)**: Simulates transaction processing. Consumes from `order-pending` and broadcasts events via an SNS topic.
 * **Inventory Service (`services/inventory`)**: Consumes from the `payment-processed-inventory` SQS queue and deducts stock counts in the database.
 * **Notification Service (`services/notification`)**: Consumes from the `payment-processed-notification` SQS queue to trigger customer dispatch simulations. Exposes a separate HTTP health API (`:8081`).
@@ -183,7 +185,7 @@ graph TD
 
 * **Language**: Go 1.26
 * **Database**: PostgreSQL 16 (RDS / Alpine Docker)
-* **Message Broker**: AWS SQS, AWS SNS, ElasticMQ (local)
+* **Message Broker**: AWS SQS, AWS SNS, LocalStack (local)
 * **IaC & Automation**: Terraform, Karpenter, FluxCD, Helm
 * **Containerization**: Docker, Distroless Static Containers
 * **Telemetry**: OpenTelemetry, Prometheus, Jaeger, Grafana
@@ -238,7 +240,7 @@ golangci-lint run ./...
 The entire local stack is orchestrated via Compose.
 
 #### 1. Boot up the environment
-Starts the database, ElasticMQ (SQS), Jaeger, Prometheus, Grafana, and Go service containers:
+Starts the database, LocalStack (SQS/SNS), Jaeger, Prometheus, Grafana, and Go service containers:
 ```bash
 make docker-up
 ```
@@ -250,11 +252,11 @@ docker compose ps
 ```
 
 #### 3. Send a test HTTP request
-Create an order by sending a payload to the order service:
+Create an order by sending a payload in integer cents (e.g. `4550` for `$45.50`) to the order service:
 ```bash
 curl -i -X POST http://localhost:8090/orders \
   -H "Content-Type: application/json" \
-  -d '{"customer_id": "cust-999", "items": [{"product_id": "prod-123", "quantity": 3, "price": 45.50}]}'
+  -d '{"customer_id": "cust-999", "items": [{"product_id": "prod-123", "quantity": 3, "price_cents": 4550}]}'
 ```
 
 #### 4. Inspect SQS Message Processing Logs
@@ -301,7 +303,7 @@ During local development, telemetry visualizers can be accessed at:
       {
         "product_id": "prod-abc",
         "quantity": 2,
-        "price": 19.99
+        "price_cents": 1999
       }
     ]
   }
@@ -315,10 +317,10 @@ During local development, telemetry visualizers can be accessed at:
       {
         "product_id": "prod-abc",
         "quantity": 2,
-        "price": 19.99
+        "price_cents": 1999
       }
     ],
-    "total_price": 39.98,
+    "total_price_cents": 3998,
     "status": "PENDING",
     "created_at": "2026-05-30T15:32:35.554570Z"
   }
@@ -357,7 +359,7 @@ We use **k6** or **Vegeta** to load test the Order API and verify queue ingestio
    ```
 3. Create `order_payload.json`:
    ```json
-   {"customer_id": "load-test-user", "items": [{"product_id": "item-load", "quantity": 1, "price": 5.00}]}
+   {"customer_id": "load-test-user", "items": [{"product_id": "item-load", "quantity": 1, "price_cents": 500}]}
    ```
 4. Attack the API at 50 requests per second for 30 seconds:
    ```bash

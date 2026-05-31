@@ -27,37 +27,21 @@ func (m *mockOrderRepo) GetByID(ctx context.Context, id string) (*domain.Order, 
 	return nil, nil
 }
 
-type mockPublisher struct {
-	publishFunc func(ctx context.Context, order *domain.Order) error
-}
-
-func (m *mockPublisher) PublishOrderCreated(ctx context.Context, order *domain.Order) error {
-	if m.publishFunc != nil {
-		return m.publishFunc(ctx, order)
-	}
-	return nil
-}
-
-func (m *mockPublisher) Close() error {
-	return nil
-}
-
 func TestCreateOrder(t *testing.T) {
 	tests := []struct {
 		name       string
 		customerID string
 		items      []domain.OrderItem
 		mockRepo   func() *mockOrderRepo
-		mockPub    func() *mockPublisher
 		expectErr  bool
-		expectSum  float64
+		expectSum  int64
 	}{
 		{
 			name:       "Happy Path",
 			customerID: "cust-1",
 			items: []domain.OrderItem{
-				{ProductID: "prod-1", Quantity: 2, Price: 10.0},
-				{ProductID: "prod-2", Quantity: 1, Price: 15.5},
+				{ProductID: "prod-1", Quantity: 2, PriceCents: 1000},
+				{ProductID: "prod-2", Quantity: 1, PriceCents: 1550},
 			},
 			mockRepo: func() *mockOrderRepo {
 				return &mockOrderRepo{
@@ -66,24 +50,16 @@ func TestCreateOrder(t *testing.T) {
 					},
 				}
 			},
-			mockPub: func() *mockPublisher {
-				return &mockPublisher{
-					publishFunc: func(ctx context.Context, order *domain.Order) error {
-						return nil
-					},
-				}
-			},
 			expectErr: false,
-			expectSum: 35.5,
+			expectSum: 3550,
 		},
 		{
 			name:       "Empty Customer ID",
 			customerID: "",
 			items: []domain.OrderItem{
-				{ProductID: "prod-1", Quantity: 1, Price: 10.0},
+				{ProductID: "prod-1", Quantity: 1, PriceCents: 1000},
 			},
 			mockRepo:  func() *mockOrderRepo { return &mockOrderRepo{} },
-			mockPub:   func() *mockPublisher { return &mockPublisher{} },
 			expectErr: true,
 		},
 		{
@@ -91,58 +67,27 @@ func TestCreateOrder(t *testing.T) {
 			customerID: "cust-1",
 			items:      []domain.OrderItem{},
 			mockRepo:   func() *mockOrderRepo { return &mockOrderRepo{} },
-			mockPub:    func() *mockPublisher { return &mockPublisher{} },
 			expectErr:  true,
 		},
 		{
 			name:       "Negative Price",
 			customerID: "cust-1",
 			items: []domain.OrderItem{
-				{ProductID: "prod-1", Quantity: 1, Price: -5.0},
+				{ProductID: "prod-1", Quantity: 1, PriceCents: -500},
 			},
 			mockRepo:  func() *mockOrderRepo { return &mockOrderRepo{} },
-			mockPub:   func() *mockPublisher { return &mockPublisher{} },
 			expectErr: true,
 		},
 		{
 			name:       "Database Save Error",
 			customerID: "cust-1",
 			items: []domain.OrderItem{
-				{ProductID: "prod-1", Quantity: 1, Price: 10.0},
+				{ProductID: "prod-1", Quantity: 1, PriceCents: 1000},
 			},
 			mockRepo: func() *mockOrderRepo {
 				return &mockOrderRepo{
 					createFunc: func(ctx context.Context, order *domain.Order) error {
 						return errors.New("db write error")
-					},
-				}
-			},
-			mockPub: func() *mockPublisher {
-				return &mockPublisher{
-					publishFunc: func(ctx context.Context, order *domain.Order) error {
-						return nil
-					},
-				}
-			},
-			expectErr: true,
-		},
-		{
-			name:       "Event Publish Error",
-			customerID: "cust-1",
-			items: []domain.OrderItem{
-				{ProductID: "prod-1", Quantity: 1, Price: 10.0},
-			},
-			mockRepo: func() *mockOrderRepo {
-				return &mockOrderRepo{
-					createFunc: func(ctx context.Context, order *domain.Order) error {
-						return nil
-					},
-				}
-			},
-			mockPub: func() *mockPublisher {
-				return &mockPublisher{
-					publishFunc: func(ctx context.Context, order *domain.Order) error {
-						return errors.New("sqs publish error")
 					},
 				}
 			},
@@ -152,7 +97,7 @@ func TestCreateOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewOrderService(tt.mockRepo(), tt.mockPub())
+			svc := NewOrderService(tt.mockRepo())
 			order, err := svc.CreateOrder(context.Background(), tt.customerID, tt.items)
 
 			if (err != nil) != tt.expectErr {
@@ -160,8 +105,8 @@ func TestCreateOrder(t *testing.T) {
 			}
 
 			if !tt.expectErr {
-				if order.TotalPrice != tt.expectSum {
-					t.Errorf("expected total price: %f, got: %f", tt.expectSum, order.TotalPrice)
+				if order.TotalPriceCents != tt.expectSum {
+					t.Errorf("expected total price: %d, got: %d", tt.expectSum, order.TotalPriceCents)
 				}
 				if order.Status != "PENDING" {
 					t.Errorf("expected status: PENDING, got: %s", order.Status)

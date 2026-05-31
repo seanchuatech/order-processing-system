@@ -81,7 +81,7 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 					continue
 				}
 
-				slog.Info("Processing payment", "order_id", order.ID, "amount", order.TotalPrice)
+				slog.Info("Processing payment", "order_id", order.ID, "amount_cents", order.TotalPriceCents)
 
 				// Simulate payment processing (80% Success, 20% Fail)
 				statusDecision := "SUCCESS"
@@ -96,11 +96,11 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 				}
 
 				event := &domain.PaymentProcessedEvent{
-					OrderID:    order.ID,
-					CustomerID: order.CustomerID,
-					Amount:     order.TotalPrice,
-					Status:     statusDecision,
-					Items:      eventItems,
+					OrderID:     order.ID,
+					CustomerID:  order.CustomerID,
+					AmountCents: order.TotalPriceCents,
+					Status:      statusDecision,
+					Items:       eventItems,
 				}
 
 				// Publish the event (using the traced msgCtx!)
