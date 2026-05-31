@@ -25,34 +25,40 @@ jobs:
           cache-dependency-path: go.work
 
       - name: Lint order-service
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: services/order
 
       - name: Lint notification-service
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: services/notification
 
       - name: Lint payment-service
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: services/payment
 
       - name: Lint inventory-service
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: services/inventory
 
       - name: Lint analytics-service
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
           version: latest
           working-directory: services/analytics
+
+      - name: Lint outbox-relay
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/outbox-relay
 
   go-tests:
     name: Go Unit Tests
@@ -91,6 +97,11 @@ jobs:
       - name: Run Tests (analytics-service)
         run: |
           cd services/analytics
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run Tests (outbox-relay)
+        run: |
+          cd services/outbox-relay
           go test -v -race -coverprofile=coverage.out ./...
 
   helm-lint:

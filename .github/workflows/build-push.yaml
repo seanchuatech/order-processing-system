@@ -58,10 +58,21 @@ jobs:
             ${{ env.IMAGE_NAME_PREFIX }}/notification-service:latest
             ${{ env.IMAGE_NAME_PREFIX }}/notification-service:${{ steps.vars.outputs.sha_short }}
 
+      - name: Build and Push (outbox-relay)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/outbox-relay
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME_PREFIX }}/outbox-relay:latest
+            ${{ env.IMAGE_NAME_PREFIX }}/outbox-relay:${{ steps.vars.outputs.sha_short }}
+
       - name: Update tags in HelmRelease values
         run: |
           yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/order-service-values.yaml
           yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/notification-service-values.yaml
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/outbox-relay-values.yaml
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
