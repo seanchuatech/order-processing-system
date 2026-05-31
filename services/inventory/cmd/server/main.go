@@ -74,7 +74,7 @@ func main() {
 		slog.Error("unable to connect to database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	slog.Info("Connected to database successfully.")
 
 	// 3. Database Schema Initialization & Seeding

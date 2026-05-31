@@ -64,7 +64,7 @@ func main() {
 		slog.Error("Could not connect to database after retries", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// 3. Initialize AWS Config and SQS Client
 	ctx := context.Background()
@@ -163,7 +163,7 @@ func processOutbox(ctx context.Context, db *sql.DB, sqsClient *sqs.Client, queue
 	if err != nil {
 		return fmt.Errorf("failed to query outbox: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []OutboxRecord
 	for rows.Next() {
@@ -176,7 +176,7 @@ func processOutbox(ctx context.Context, db *sql.DB, sqsClient *sqs.Client, queue
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("error during outbox rows iteration: %w", err)
 	}
-	rows.Close() // Close early to avoid holding connection during SQS network call
+	_ = rows.Close() // Close early to avoid holding connection during SQS network call
 
 	if len(records) == 0 {
 		return nil
