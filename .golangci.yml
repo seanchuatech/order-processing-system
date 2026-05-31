@@ -1,3 +1,5 @@
+version: "2"
+
 # .golangci.yml
 # Override the targeted Go version for AST analysis.
 
