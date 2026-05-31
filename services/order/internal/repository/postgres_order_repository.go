@@ -96,7 +96,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch order items: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var item domain.OrderItem

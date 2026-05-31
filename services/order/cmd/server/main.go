@@ -69,7 +69,7 @@ func main() {
 		slog.Error("Could not connect to database after retries", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// 3. Run Database migrations/schema setup
 	if err := setupDatabaseSchema(db); err != nil {
