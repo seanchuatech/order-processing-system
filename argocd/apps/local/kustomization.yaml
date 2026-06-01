@@ -7,23 +7,44 @@ resources:
 
 patches:
   - target:
-      kind: ExternalSecret
-      name: order-service-app-generic
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: order-service
     patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: order-service-secrets
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          externalSecret:
+            data:
+              - secretKey: DATABASE_URL
+                remoteRef:
+                  key: order-service-secrets
   - target:
-      kind: ExternalSecret
-      name: outbox-relay-app-generic
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: outbox-relay
     patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: order-service-secrets
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          externalSecret:
+            data:
+              - secretKey: DATABASE_URL
+                remoteRef:
+                  key: order-service-secrets
   - target:
-      kind: ExternalSecret
-      name: inventory-service-app-generic
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: inventory-service
     patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: inventory-service-secrets
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          externalSecret:
+            data:
+              - secretKey: DATABASE_URL
+                remoteRef:
+                  key: inventory-service-secrets
