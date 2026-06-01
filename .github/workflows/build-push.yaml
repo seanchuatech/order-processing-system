@@ -68,11 +68,11 @@ jobs:
             ${{ env.IMAGE_NAME_PREFIX }}/outbox-relay:latest
             ${{ env.IMAGE_NAME_PREFIX }}/outbox-relay:${{ steps.vars.outputs.sha_short }}
 
-      - name: Update tags in HelmRelease values
+      - name: Update tags in ArgoCD Application values
         run: |
-          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/order-service-values.yaml
-          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/notification-service-values.yaml
-          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' flux/apps/base/outbox-relay-values.yaml
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' argocd/apps/base/order-service-values.yaml
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' argocd/apps/base/notification-service-values.yaml
+          yq -i '.image.tag = "${{ steps.vars.outputs.sha_short }}"' argocd/apps/base/outbox-relay-values.yaml
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
@@ -83,6 +83,6 @@ jobs:
           body: |
             Automated image tag update to `${{ steps.vars.outputs.sha_short }}`.
             
-            This PR updates the HelmRelease override values for `order-service` and `notification-service`.
+            This PR updates the ArgoCD Application override values for `order-service`, `notification-service`, and `outbox-relay`.
           branch: "update-image-tags-${{ steps.vars.outputs.sha_short }}"
           base: main

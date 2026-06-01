@@ -766,18 +766,20 @@ resource "helm_release" "external_secrets" {
   }
 }
 
-resource "helm_release" "flux2" {
-  name             = "flux2"
-  repository       = "https://fluxcd-community.github.io/helm-charts"
-  chart            = "flux2"
-  namespace        = "flux-system"
+resource "helm_release" "argocd" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  version          = "7.1.3"
+  namespace        = "argocd"
   create_namespace = true
 
   set {
-    name  = "cli.tag"
-    value = "v2.4.0"
+    name  = "configs.params.server.insecure"
+    value = "true"
   }
 }
+
 
 # ==========================================
 # 6. Karpenter Autoscaling

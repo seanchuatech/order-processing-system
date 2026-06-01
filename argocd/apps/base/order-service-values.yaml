@@ -1,0 +1,53 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/seanchuatech/order-processing-system/order-service
+  tag: 6d00506
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8090
+
+env:
+  PORT: "8090"
+
+serviceAccount:
+  create: true
+  name: "order-service"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-order-service-role"
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+externalSecret:
+  enabled: true
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  keys:
+    - DATABASE_URL
+  data:
+    - secretKey: DATABASE_URL
+      remoteRef:
+        key: /ops-sandbox/order-service/DATABASE_URL
