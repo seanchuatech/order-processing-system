@@ -4,3 +4,26 @@ resources:
   - ../base
   - cluster-secret-store.yaml
   - external-services.yaml
+
+patches:
+  - target:
+      kind: ExternalSecret
+      name: order-service-app-generic
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: order-service-secrets
+  - target:
+      kind: ExternalSecret
+      name: outbox-relay-app-generic
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: order-service-secrets
+  - target:
+      kind: ExternalSecret
+      name: inventory-service-app-generic
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: inventory-service-secrets
