@@ -87,4 +87,4 @@
   - [x] Step 4: Create root Application sync manifests (argocd-sync.yaml)
   - [x] Step 5: Update build-push.yaml GitHub Actions workflow
   - [x] Step 6: Verify ArgoCD locally on Kind cluster
-  - [ ] Step 7: Cleanup flux resources (after validation passes)
+  - [x] Step 7: Cleanup flux resources (after validation passes)

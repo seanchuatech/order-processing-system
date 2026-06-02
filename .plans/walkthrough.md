@@ -212,3 +212,6 @@
      ```json
      {"status":"healthy"}
      ```
+7. **FluxCD Legacy Resource Cleanup**:
+   - Completely deleted the legacy `flux/` directory and its corresponding local and production manifests.
+   - Removed the `flux-sync.yaml` root synchronization manifests from `terraform/local-platform/` and `terraform/platform/`.
