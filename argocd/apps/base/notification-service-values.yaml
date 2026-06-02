@@ -1,38 +1,31 @@
 replicaCount: 1
-
 image:
   repository: ghcr.io/seanchuatech/order-processing-system/notification-service
-  tag: 6d00506
+  tag: 7a6b959
   pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 8081
-
 env:
   PORT: "8081"
   SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/728399088474/ops-sandbox-payment-processed-notification"
-
 serviceAccount:
   create: true
   name: "notification-service"
   annotations:
     eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-notification-service-role"
-
 livenessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 resources:
   limits:
     cpu: 200m
@@ -40,6 +33,5 @@ resources:
   requests:
     cpu: 50m
     memory: 64Mi
-
 externalSecret:
   enabled: false
