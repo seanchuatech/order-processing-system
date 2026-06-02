@@ -21,6 +21,9 @@ patches:
                 remoteRef:
                   key: order-service-secrets
                   property: DATABASE_URL
+          env:
+            PORT: "8090"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
   - target:
       group: argoproj.io
       version: v1alpha1
@@ -36,6 +39,14 @@ patches:
                 remoteRef:
                   key: order-service-secrets
                   property: DATABASE_URL
+          env:
+            PORT: "8095"
+            SQS_QUEUE_URL: "http://localstack:4566/000000000000/order-pending"
+            SQS_ENDPOINT: "http://localstack:4566"
+            AWS_REGION: "us-east-1"
+            AWS_ACCESS_KEY_ID: "mock"
+            AWS_SECRET_ACCESS_KEY: "mock"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
   - target:
       group: argoproj.io
       version: v1alpha1
@@ -51,3 +62,64 @@ patches:
                 remoteRef:
                   key: inventory-service-secrets
                   property: DATABASE_URL
+          env:
+            PORT: "8093"
+            SQS_QUEUE_URL: "http://localstack:4566/000000000000/payment-processed-inventory"
+            SQS_ENDPOINT: "http://localstack:4566"
+            AWS_REGION: "us-east-1"
+            AWS_ACCESS_KEY_ID: "mock"
+            AWS_SECRET_ACCESS_KEY: "mock"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: payment-service
+    patch: |-
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          env:
+            PORT: "8092"
+            SQS_QUEUE_URL: "http://localstack:4566/000000000000/order-pending"
+            SQS_ENDPOINT: "http://localstack:4566"
+            SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:payment-processed"
+            SNS_ENDPOINT: "http://localstack:4566"
+            AWS_REGION: "us-east-1"
+            AWS_ACCESS_KEY_ID: "mock"
+            AWS_SECRET_ACCESS_KEY: "mock"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: notification-service
+    patch: |-
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          env:
+            PORT: "8081"
+            SQS_QUEUE_URL: "http://localstack:4566/000000000000/payment-processed-notification"
+            SQS_ENDPOINT: "http://localstack:4566"
+            AWS_REGION: "us-east-1"
+            AWS_ACCESS_KEY_ID: "mock"
+            AWS_SECRET_ACCESS_KEY: "mock"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Application
+      name: analytics-service
+    patch: |-
+      - op: add
+        path: /spec/source/helm/values
+        value: |
+          env:
+            PORT: "8094"
+            SQS_QUEUE_URL: "http://localstack:4566/000000000000/payment-processed-analytics"
+            SQS_ENDPOINT: "http://localstack:4566"
+            AWS_REGION: "us-east-1"
+            AWS_ACCESS_KEY_ID: "mock"
+            AWS_SECRET_ACCESS_KEY: "mock"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
