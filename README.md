@@ -5,7 +5,7 @@ A production-grade, GitOps-driven event-driven monorepo replicating a modern ent
 ---
 
 ## Overview
-This system is an event-driven order processing engine designed to orchestrate order registration, transaction processing, inventory deduction, notification dispatch, and real-time operational analytics. It replicates a real-world enterprise platform stack utilizing Go microservices, event-driven pub/sub messaging via AWS SNS/SQS, containerization, GitOps automation via FluxCD, local Kubernetes clusters via Kind, and enterprise Cloud Infrastructure on AWS using Terraform.
+This system is an event-driven order processing engine designed to orchestrate order registration, transaction processing, inventory deduction, notification dispatch, and real-time operational analytics. It replicates a real-world enterprise platform stack utilizing Go microservices, event-driven pub/sub messaging via AWS SNS/SQS, containerization, GitOps automation via ArgoCD, local Kubernetes clusters via Kind, and enterprise Cloud Infrastructure on AWS using Terraform.
 
 ---
 
@@ -57,7 +57,7 @@ graph TD
     
     subgraph CD_Release["Release & GitOps (build-push.yaml)"]
         DockerBuild[Docker Buildx Multi-Arch] -->|Push| GHCR[GitHub Container Registry]
-        UpdateYAML[Update Flux HelmRelease values] -->|Create PR| GitHubPR[GitOps Pull Request]
+        UpdateYAML[Update ArgoCD application values] -->|Create PR| GitHubPR[GitOps Pull Request]
     end
     
     GitHub -->|Trigger| CI_Quality
@@ -80,7 +80,7 @@ graph TD
    * Runs on every push to the `main` branch.
    * Compiles and multi-platform builds Docker containers for all microservices (`linux/amd64`, `linux/arm64`).
    * Publishes images to the **GitHub Container Registry (GHCR)**.
-   * Automatically updates HelmRelease values in `flux/apps/base/` with the new image tag (short Git SHA) and raises a Pull Request to merge the tag updates back to `main`.
+   * Automatically updates service values in `argocd/apps/base/` with the new image tag (short Git SHA) and raises a Pull Request to merge the tag updates back to `main`.
 
 ---
 
@@ -133,7 +133,7 @@ graph TD
   * **Messaging (SQS & SNS)**: Provisions queues (`order-pending`, fanout queues) and SNS topics. Configures Dead Letter Queues (DLQs) with max receive counts of 3.
   * **Data Encryption**: Deploys an AWS KMS Customer Managed Key (CMK) to encrypt SQS queues and Systems Manager (SSM) Parameters.
   * **Secret Management**: Automatically syncs SSM Parameter Store configurations into Kubernetes native Secrets via the **External Secrets Operator (ESO)** using IAM Roles for Service Accounts (IRSA).
-  * **GitOps**: Boots up the **FluxCD Helm Controller** to reconcile the cluster state against Kubernetes manifests in the repository.
+  * **GitOps**: Boots up **ArgoCD** to reconcile the cluster state against Kubernetes manifests in the repository.
 
 ---
 
@@ -186,7 +186,7 @@ graph TD
 * **Language**: Go 1.26
 * **Database**: PostgreSQL 16 (RDS / Alpine Docker)
 * **Message Broker**: AWS SQS, AWS SNS, LocalStack (local)
-* **IaC & Automation**: Terraform, Karpenter, FluxCD, Helm
+* **IaC & Automation**: Terraform, Karpenter, ArgoCD, Helm
 * **Containerization**: Docker, Distroless Static Containers
 * **Telemetry**: OpenTelemetry, Prometheus, Jaeger, Grafana
 
@@ -276,7 +276,7 @@ make docker-down
 ## Cloud Deployment
 
 * **IaC Provisioning**: Deployed via Terraform platform modules.
-* **GitOps Continuous Deployment**: Managed by FluxCD watching the `/flux` directory of this repository. Values overrides for local and production EKS clusters are specified under `flux/apps/local/` and `flux/apps/production/`.
+* **GitOps Continuous Deployment**: Managed by ArgoCD watching the `/argocd` directory of this repository. Application overrides for local and production EKS clusters are configured under `argocd/apps/local/` and `argocd/apps/production/`.
 
 ---
 
