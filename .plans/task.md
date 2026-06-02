@@ -1,0 +1,90 @@
+# Tasks
+
+- [x] Phase 0 — Project Scaffolding & Standards
+  - [x] Create `.plans/implementation_plan.md` (copied to workspace)
+  - [x] Create `.plans/task.md` and initialize tracking
+  - [x] Create `.gitignore` at root of workspace
+  - [x] Create global `AGENTS.md` (The Constitution)
+  - [x] Create `.agents/rules/coding-style.md`
+  - [x] Create `.agents/rules/git-conventions.md`
+  - [x] Create `.agents/rules/infra-guardrails.md`
+  - [x] Create `.agents/rules/security-rules.md`
+  - [x] Create `.agents/workflows/review-code.md`
+  - [x] Create `.agents/workflows/write-tests.md`
+  - [x] Create `.agents/workflows/new-service.md`
+  - [x] Create `SKILLS.md`
+  - [x] Create root `Makefile`
+  - [x] Create `.github/workflows/ci.yaml`
+- [x] Phase 1 — Go Services (Local, docker-compose)
+  - [x] Scaffold `services/order-service`
+  - [x] Implement `order-service` HTTP handler + Kafka publisher
+  - [x] Scaffold `services/notification-service`
+  - [x] Implement `notification-service` Kafka consumer
+  - [x] Add Dockerfiles & Makefiles for both services
+  - [x] Configure `docker-compose.yaml` (Kafka + Postgres + services)
+  - [x] Add unit tests & linting rules
+- [x] Phase 2 — The `app-generic` Helm Chart
+  - [x] Create `helm-charts/app-generic` chart
+  - [x] Implement deployment, service, ingress, HPA, and ExternalSecret templates
+  - [x] Write Helm Release base configurations for the 2 services
+- [x] Phase 3 — Local Kubernetes (Kind + Terraform + FluxCD)
+  - [x] Write Terraform config for Kind cluster (`terraform/bootstrap`)
+  - [x] Write Terraform config for operators (FluxCD, ESO, Ingress-NGINX) (`terraform/platform`)
+  - [x] Bootstrap FluxCD GitOps to watch the repo
+  - [x] Deploy the 2 services via Flux HelmRelease
+- [x] Phase 4 — External Secrets Operator (Local Simulation)
+  - [x] Set up local simulated vault using K8s secrets in `secrets-vault`
+  - [x] Connect ESO with `ClusterSecretStore`
+  - [x] Validate order-service secret injection
+- [x] Phase 5 — CI/CD Pipeline (GitHub Actions)
+  - [x] Complete `ci.yaml` (lint + test + helm-lint)
+  - [x] Complete `security.yaml` (gosec + trivy + checkov)
+  - [x] Complete `build-push.yaml` (build + push to GHCR + auto-tag update)
+- [x] Phase 6 — AWS Cloud Run & SQS Migration
+  - [x] Update Go dependencies & code for order-service
+  - [x] Update Go dependencies & code for notification-service
+  - [x] Update local setup (docker-compose.yaml + elasticmq.conf)
+  - [x] Verify local pub/sub logic with docker-compose
+  - [x] Update generic Helm chart to support ServiceAccounts
+  - [x] Update Terraform configuration (create SQS, IAM roles, and EKS access entry)
+  - [x] Update FluxCD GitOps configuration values
+  - [x] Deploy to EKS and verify Karpenter node registration & pod scheduling
+  - [x] Verify end-to-end flow on AWS EKS
+  - [x] Destroy AWS infrastructure
+- [x] Phase 7 — Implement 3 Remaining Services (Payment, Inventory, Analytics)
+  - [x] Step 1: Update existing files for queue rename breaking change
+  - [x] Step 2: Scaffold and implement `payment-service`
+  - [x] Step 3: Scaffold and implement `inventory-service`
+  - [x] Step 4: Scaffold and implement `analytics-service`
+  - [x] Step 5: Update project orchestration & CI/CD workflows
+  - [x] Step 6: Verify entire stack locally via docker-compose
+  - [x] Step 7: Update infrastructure-as-code (Terraform Platform layer)
+  - [x] Step 8: Update GitOps (FluxCD base configurations)
+  - [x] Step 9: Verify entire stack end-to-end on EKS (Deferred to post-observability phase)
+- [x] Phase 8 — Observability Integration
+  - [x] Step 1: Design OTel trace context SQS carriers
+  - [x] Step 2: Implement structured JSON logging (`log/slog`) across all 5 services
+  - [x] Step 3: Implement OpenTelemetry trace collection & context propagation across all 5 services
+  - [x] Step 4: Implement Prometheus metrics endpoint exposing HTTP request and SQS consumer stats
+  - [x] Step 5: Update `docker-compose.yaml` with Jaeger, Prometheus, and Grafana configurations
+  - [x] Step 6: Verify end-to-end tracing and metrics aggregation locally
+- [x] Phase 10 — Hardening & Architectural Fixes
+  - [x] Fix 3: LocalStack — True SNS/SQS Local Parity
+  - [x] Fix 2: int64 Cents for All Monetary Values
+  - [x] Fix 1: Transactional Outbox Pattern (Separate Microservice)
+  - [x] Fix 4: CloudWatch Alarms on All DLQs
+- [x] Phase 11 — Upgrading Codebase to Go 1.26 & Linter Alignment
+  - [x] Standardize Go workspace version to Go 1.26
+  - [x] Align sub-module go.mod files to Go 1.26
+  - [x] Update microservice Dockerfiles base builder image to golang:1.26-alpine
+  - [x] Upgrade golangci-lint-action to v7 in GitHub CI
+  - [x] Specify v2 schema format and Go 1.26 AST parser in .golangci.yml
+  - [x] Resolve static analyzer errcheck warnings across all services
+- [/] Phase 12 — Migration from FluxCD to ArgoCD
+  - [x] Step 1: Create argocd base manifests and copy values files
+  - [x] Step 2: Create local and production overlays for ArgoCD
+  - [x] Step 3: Update local-platform and platform Terraform modules to install ArgoCD
+  - [x] Step 4: Create root Application sync manifests (argocd-sync.yaml)
+  - [x] Step 5: Update build-push.yaml GitHub Actions workflow
+  - [x] Step 6: Verify ArgoCD locally on Kind cluster
+  - [ ] Step 7: Cleanup flux resources (after validation passes)
