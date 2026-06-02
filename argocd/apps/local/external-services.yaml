@@ -16,7 +16,7 @@ metadata:
   namespace: default
 subsets:
   - addresses:
-      - ip: 172.20.0.2
+      - ip: 172.19.0.1
     ports:
       - port: 5432
 ---
@@ -38,7 +38,7 @@ metadata:
   namespace: default
 subsets:
   - addresses:
-      - ip: 172.20.0.2
+      - ip: 172.19.0.1
     ports:
       - port: 4317
 ---
@@ -60,6 +60,6 @@ metadata:
   namespace: default
 subsets:
   - addresses:
-      - ip: 172.20.0.2
+      - ip: 172.19.0.1
     ports:
       - port: 4567
