@@ -51,7 +51,7 @@ spec:
   ports:
     - protocol: TCP
       port: 4566
-      targetPort: 4566
+      targetPort: 4567
 ---
 apiVersion: v1
 kind: Endpoints
@@ -62,4 +62,4 @@ subsets:
   - addresses:
       - ip: 172.20.0.2
     ports:
-      - port: 4566
+      - port: 4567

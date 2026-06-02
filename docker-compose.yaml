@@ -3,7 +3,7 @@ services:
     image: localstack/localstack:3.8
     container_name: localstack
     ports:
-      - "4566:4566"
+      - "4567:4566"
     environment:
       - SERVICES=sqs,sns
       - AWS_DEFAULT_REGION=us-east-1
