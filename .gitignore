@@ -75,7 +75,11 @@ kubeconfig
 
 # Exclude README.md files from being ignored
 !**/README.md
-!**/TECH_STACK_WALKTHROUGH.md
+!**/WALKTHROUGH_TECH_STACK.md
+!**/WALKTHROUGH_APPLICATION_ARCHITECHTURE.md
+!**/WALKTHROUGH_CICD_ARCHITECTURE.md
+!**/WALKTHROUGH_INFRASTRUCTURE_ARCHITECTURE.md
+!**/WALKTHROUGH_OBSERVABILITY_ARCHITECTURE.md
 
 # Ignore plans directory (only for local use)
 .plans/
