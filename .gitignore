@@ -80,6 +80,7 @@ kubeconfig
 !**/WALKTHROUGH_CICD_ARCHITECTURE.md
 !**/WALKTHROUGH_INFRASTRUCTURE_ARCHITECTURE.md
 !**/WALKTHROUGH_OBSERVABILITY_ARCHITECTURE.md
+!**/GLOSSARY.md
 
 # Ignore plans directory (only for local use)
 .plans/
