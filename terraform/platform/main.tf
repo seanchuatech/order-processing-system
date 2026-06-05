@@ -811,6 +811,8 @@ resource "helm_release" "karpenter" {
   chart      = "karpenter"
   version    = "1.0.0"
 
+  depends_on = [module.karpenter]
+
   set {
     name  = "settings.clusterName"
     value = data.terraform_remote_state.bootstrap.outputs.cluster_name
