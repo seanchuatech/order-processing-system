@@ -1,38 +1,31 @@
 replicaCount: 1
-
 image:
   repository: ghcr.io/seanchuatech/order-processing-system/outbox-relay
-  tag: latest
+  tag: ba3fadc
   pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 8095
-
 env:
   PORT: "8095"
   SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/728399088474/ops-sandbox-order-pending"
-
 serviceAccount:
   create: true
   name: "outbox-relay"
   annotations:
     eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-order-service-role"
-
 livenessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 resources:
   limits:
     cpu: 200m
@@ -40,7 +33,6 @@ resources:
   requests:
     cpu: 50m
     memory: 64Mi
-
 externalSecret:
   enabled: true
   secretStoreRef:
