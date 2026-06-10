@@ -1,38 +1,31 @@
 replicaCount: 1
-
 image:
   repository: ghcr.io/seanchuatech/order-processing-system/inventory-service
-  tag: latest
+  tag: d9023a2
   pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 8093
-
 env:
   PORT: "8093"
   SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/728399088474/ops-sandbox-payment-processed-inventory"
-
 serviceAccount:
   create: true
   name: "inventory-service"
   annotations:
     eks.amazonaws.com/role-arn: "arn:aws:iam::728399088474:role/ops-sandbox-inventory-service-role"
-
 livenessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 readinessProbe:
   httpGet:
     path: /health
     port: http
   initialDelaySeconds: 10
   periodSeconds: 10
-
 resources:
   limits:
     cpu: 200m
@@ -40,7 +33,6 @@ resources:
   requests:
     cpu: 50m
     memory: 64Mi
-
 externalSecret:
   enabled: true
   secretStoreRef:
