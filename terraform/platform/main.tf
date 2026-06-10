@@ -832,6 +832,22 @@ resource "helm_release" "karpenter" {
     name  = "settings.interruptionQueue"
     value = module.karpenter.queue_name
   }
+
+  # Override postInstallHook image as ECR Public discontinued Bitnami images on June 10, 2026.
+  set {
+    name  = "postInstallHook.image.repository"
+    value = "docker.io/alpine/k8s"
+  }
+
+  set {
+    name  = "postInstallHook.image.tag"
+    value = "1.30.2"
+  }
+
+  set {
+    name  = "postInstallHook.image.digest"
+    value = ""
+  }
 }
 
 # ==========================================
